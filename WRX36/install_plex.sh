@@ -12,6 +12,9 @@ install_plex() {
 #
 # EXAMPLE:   install_plex /dev/sda2 /mnt/plex
 
+# make sure theres 2 inputs
+[ $# == 2 ] || { printf '\n\nERROR! MUST HAVE 2 INPUTS. \nUSAGE: install_plex <plex_dev> <plex_mnt>\n\n' >&2 && return 1; }
+
 # download main init.d script
 curl 'https://raw.githubusercontent.com/jkool702/openwrt-plexmediaserver/main/WRX36/etc/init.d/plexmediaserver' > /etc/init.d/plexmediaserver
 
@@ -26,11 +29,21 @@ ps | grep -q 'Plex Media Server' || /etc/init.d/plexmediaserver start
 
 EOF
 
-# build plex squashfs image
-service plexmediaserver update
+# setup UCI and build plex squashfs image 
+service plexmediaserver start
 sleep 5
 
 # start plex
 service plexmediaserver start
 
+# print usage info
+{
+printf '\n\nplexmediaserver has been installed and setup to automatically start up when the router boots\n'
+printf '\nTo manually start/stop plexmediaserver, use:      \t service plexmediaserver [start|stop]\n'
+printf '\nTo update to a new plexmediaserver version, use: \t service plexmediaserver update \n'
+printf '\nTo access Plex from a web browser, go to:       \t %s\n\n' "$(ip addr show br-lan | grep 'inet '| sed -E s/'^.*inet (.*)\/.*$'/'\1'/):32400/web" >&2
+} >&2
+
 }
+
+[ $# == 2 ] && install_plex "$1" "$2"
