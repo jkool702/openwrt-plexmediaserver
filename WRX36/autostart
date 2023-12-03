@@ -1,0 +1,13 @@
+#  using `service plexmediaserver enable doesnt quite work to start up plexmediaserver on boot.
+# instead, use rc.local to automatically run `service plexmediaserver start` on bopotup (after mounting the plex external drive)
+# note: replace the '#' and '@@@@@@' characters with the proper values for your setup
+
+cat<<'EOF'>>/etc/rc.local
+
+mount /dev/sda# /mnt/@@@@@@
+sleep 5
+/etc/init.d/plexmediaserver start
+sleep 5
+ps | grep -q 'Plex Media Server' || /etc/init.d/plexmediaserver start
+
+EOF
