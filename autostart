@@ -1,13 +1,27 @@
-#  using `service plexmediaserver enable doesnt quite work to start up plexmediaserver on boot.
-# instead, use rc.local to automatically run `service plexmediaserver start` on bopotup (after mounting the plex external drive)
-# note: replace the '#' and '@@@@@@' characters with the proper values for your setup
+#!/bin/sh
 
-cat<<'EOF'>>/etc/rc.local
+#  using `service plexmediaserver enable doesnt quite work to start up plexmediaserver on boot, 
+# since it tends to get started before the drive with the plex  library on it gets mounted.
+# instead, use /etc/rc.local to automatically run `service plexmediaserver start` on bootup 
+# (after mounting the plex external drive)
 
-mount /dev/sda# /mnt/@@@@@@
+install_plex() {
+## sets up and installs a plexmediaserver instance that runs on your WRX36. (note: this setup function requires `curl`
+#
+# USAGE:     install_plex <plex_dev> <plex_mnt>
+#
+# EXAMPLE:   install_plex /dev/sda2 /mnt/plex
+
+curl 'https://raw.githubusercontent.com/jkool702/openwrt-plexmediaserver/main/WRX36/etc/init.d/plexmediaserver' > /etc/init.d/plexmediaserver
+
+cat<<EOF>>/etc/rc.local
+
+mount $1 $2
 sleep 5
 /etc/init.d/plexmediaserver start
 sleep 5
 ps | grep -q 'Plex Media Server' || /etc/init.d/plexmediaserver start
 
 EOF
+
+}
