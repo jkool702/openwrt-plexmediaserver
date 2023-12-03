@@ -36,13 +36,14 @@ NAME='plexmediaserver'
 START=99
 STOP=99
 EXTRA_COMMANDS="setup_uci unpack_plex check_update update do_update"
-EXTRA_HELP=<<EOF
+EXTRA_HELP=$(cat<<EOF
         setup_uci       Does initial setup of UCI, and (if needed) downloads required plex files
         unpack_plex     Unpacks the compresssed plexmediaserver archive at /tmp/plexmediaserver/<plex_version>
         check_update    Checks if an updated Plex Media Server package is available for download
         update          Downloads Plex Media Server update (if available) and runs do_update to generate a compressed archive of it
         do_update	      Actually downloads and generates the compressed squashfs archive (calling do_update will not check first with check_update)
 EOF
+)
 
 setup_uci() {
 	echo "setting up UCI config for plexmediaserver" >&2
@@ -102,7 +103,7 @@ load_uci() {
    		fi
    	done
   }
-	{ [ -z "${PLEX_BROWSER_ROOT}" ] || ! [ -e "${PLEX_BROWSER_ROOT}" ]; } && { echo 'COULD NOT DETERMINE THE MOUNTPOINT OF THE DRIVE HOLDING THE PLEX LIBRARY. PLEASE MOUNT IT AND RESTART PLEX' >&2; exit 1 }
+	{ [ -z "${PLEX_BROWSER_ROOT}" ] || ! [ -e "${PLEX_BROWSER_ROOT}" ]; } && { echo 'COULD NOT DETERMINE THE MOUNTPOINT OF THE DRIVE HOLDING THE PLEX LIBRARY. PLEASE MOUNT IT AND RESTART PLEX' >&2; exit 1; }
 	[ -n "${PLEX_BROWSER_ROOT}" ] && /sbin/uci set plexmediaserver.@main[0].plex_browser_root="${PLEX_BROWSER_ROOT}"
 
 	if { [ -z "${PLEX_LIBRARY_DIR}" ] || ! [ -e "${PLEX_LIBRARY_DIR}" ]; }; then
@@ -355,9 +356,9 @@ do_update() {
 	stop
 	sleep 1
 	sync
-	sleep 1	
-	start
-	sleep 1
+
+	{ sleep 10; source /etc/init.d/plexmediaserver; start; } &
+
 	exit
 	
 }
