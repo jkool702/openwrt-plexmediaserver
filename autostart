@@ -12,8 +12,10 @@ install_plex() {
 #
 # EXAMPLE:   install_plex /dev/sda2 /mnt/plex
 
+# download main init.d script
 curl 'https://raw.githubusercontent.com/jkool702/openwrt-plexmediaserver/main/WRX36/etc/init.d/plexmediaserver' > /etc/init.d/plexmediaserver
 
+# use /etc/rc.local to set up automatically starting plex on boot
 cat<<EOF>>/etc/rc.local
 
 mount $1 $2
@@ -23,5 +25,12 @@ sleep 5
 ps | grep -q 'Plex Media Server' || /etc/init.d/plexmediaserver start
 
 EOF
+
+# build plex squashfs image
+service plexmediaserver update
+sleep 5
+
+# start plex
+service plexmediaserver start
 
 }
