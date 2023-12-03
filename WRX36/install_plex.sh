@@ -29,6 +29,12 @@ ps | grep -q 'Plex Media Server' || /etc/init.d/plexmediaserver start
 
 EOF
 
+# mount plex drive
+mount "$1" "$2"
+
+# make plex Library root dir
+mkdir -p "${2}/.plex/Library"
+
 # setup UCI and build plex squashfs image 
 service plexmediaserver start
 sleep 5
