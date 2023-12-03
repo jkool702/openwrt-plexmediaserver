@@ -356,10 +356,12 @@ do_update() {
 	stop
 	sleep 1
 	sync
-
-	{ sleep 10; source /etc/init.d/plexmediaserver; start; } &
+        start
+	sleep 1
 
 	exit
 	
 }
+
+
 
