@@ -9,7 +9,7 @@ Sets up an on-router plex media server instance
 
 **INSTALL INSTRUCTIONS**
 
-An install script (install_plex.sh) is in the top level repo directory. This will setup and install plex media server (via an init.d service) and will add something to something to `/etc/rc.local` to start plex on boot can be found [HERE](https://github.com/jkool702/openwrt-plexmediaserver/blob/main/install_plex.s) 
+An install script (install_plex.sh) is in the top level repo directory. This will setup and install plex media server (via an init.d service) and will add something to something to `/etc/rc.local` to start plex on boot can be found [HERE](https://github.com/jkool702/openwrt-plexmediaserver/blob/main/install_plex.sh) 
 
 Note: install script required `curl`
 
