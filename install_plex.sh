@@ -20,10 +20,10 @@ curl 'https://raw.githubusercontent.com/jkool702/openwrt-plexmediaserver/main/WR
 chmod +x /etc/init.d/plexmediaserver
 
 # use /etc/rc.local to set up automatically starting plex on boot
-tr -d '\n' </etc/rc.local | grep -q 'mount '"${1} ${2}"'sleep 5/etc/init.d/plexmediaserver startsleep 5ps | grep -q '"'"'Plex Media Server'"'"' || /etc/init.d/plexmediaserver start' || {
+tr -d '\n' </etc/rc.local | grep -q 'at /proc/mounts | grep -q "'"${1} ${2}"'" || mount '"${1} ${2}"'sleep 5/etc/init.d/plexmediaserver startsleep 5ps | grep -q '"'"'Plex Media Server'"'"' || /etc/init.d/plexmediaserver start' || {
 cat<<EOF>>/etc/rc.local
 
-mount $1 $2
+cat /proc/mounts | grep -q "${1} ${2}" || mount $1 $2
 sleep 5
 /etc/init.d/plexmediaserver start
 sleep 5
