@@ -7,6 +7,10 @@ Sets up an on-router plex media server instance
 
 **COMPATIBLE DEVICES**: This **should** work on any sufficiently powerful armv7 or armv8 device that meets the above requirements, but has only been tested on a Netgear R9000 (ARMv7) and a dynalink dl-wrx36 (ARMv8).
 
+The dynalink dl-wrx36 is probably the least expensive device ($80 at the time of writing) that can run a plex media server instance fairly well.
+
+NOTE: Everything works well except video transcoding...transcoding any video at 720p or higher resolution is going to studder with an ARM CPU. I highly recommend turning off video transcoding altogether in the plex media player settings. 
+
 # INSTALL INSTRUCTIONS
 
 An install script (install_plex.sh) is in the top level repo directory. This will setup and install plex media server (via an init.d service) and will add something to something to `/etc/rc.local` to start plex on boot can be found [HERE](https://github.com/jkool702/openwrt-plexmediaserver/blob/main/install_plex.sh) 
