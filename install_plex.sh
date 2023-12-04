@@ -17,6 +17,7 @@ install_plex() {
 
 # download main init.d script
 curl 'https://raw.githubusercontent.com/jkool702/openwrt-plexmediaserver/main/WRX36/etc/init.d/plexmediaserver' > /etc/init.d/plexmediaserver
+chmod +x /etc/init.d/plexmediaserver
 
 # use /etc/rc.local to set up automatically starting plex on boot
 cat<<EOF>>/etc/rc.local
