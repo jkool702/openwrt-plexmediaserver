@@ -1,9 +1,11 @@
 # openwrt-plexmediaserver
 Sets up an on-router plex media server instance
 
-**REQUIREMENTS**: an ARMv7 or ARMv8 device with a beefy CPU (quad-core is probably preferable) and at least 120 MB of free RAM that can be dedicated to plex media server. 
+**HARDWARE REQUIREMENTS**: an ARMv7 or ARMv8 device with a beefy CPU (quad-core is probably preferable), a USB port (and external hard drive) and at least 120 MB of free RAM that can be dedicated to plex media server. 
 
-**COMPATABLE DEVICES**: This **should** work on any sufficiently powerful armv7 or armv8 device, but has only been tested on a Netgear R9000 (ARMv7) and a dynalink dl-wrx36 (ARMv8).
+**SOFTWARE REQUIREMENTS**: the ability to unzip files, and the ability to both create and mount XZ-compressed SquashFS filesystems
+
+**COMPATIBLE DEVICES**: This **should** work on any sufficiently powerful armv7 or armv8 device that meets the above requirements, but has only been tested on a Netgear R9000 (ARMv7) and a dynalink dl-wrx36 (ARMv8).
 
 **INSTALL INSTRUCTIONS**
 
