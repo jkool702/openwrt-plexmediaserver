@@ -15,7 +15,7 @@ Note: install script required `curl`
 
 The easiest way to set everything up is probably to run the following on your Router:
 
-    curl 'https://raw.githubusercontent.com/jkool702/openwrt-plexmediaserver/main/WRX36/install_plex.sh' >/tmp/install_plex.sh
+    curl 'https://raw.githubusercontent.com/jkool702/openwrt-plexmediaserver/main/install_plex.sh' >/tmp/install_plex.sh
     chmod +x /tmp/install_plex.sh
 
     /tmp/install_plex.sh <PLEX_DEV> <PLEX_MNT>
