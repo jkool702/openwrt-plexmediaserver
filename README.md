@@ -5,7 +5,7 @@ Sets up an on-router plex media server instance
 
 **SOFTWARE REQUIREMENTS**: the ability to unzip `*.zip` files, the ability to both create and mount XZ-compressed SquashFS filesystems, and the ability to mount the external hard drive.
 
-At minimum, you will need the following packages (plus their dependencies):  kmod-fs-squashfs squashfs-tools-mksquashfs kmod-usb-core kmod-usb-storage
+**IMPORTANT NOTE**: At minimum, you will need the following openwrt packages (plus their dependencies):  kmod-fs-squashfs squashfs-tools-mksquashfs kmod-usb-core kmod-usb-storage
 You may need additional packages as well, depending on your specific setup (e.g., the driver to run the usb port, the ntfs-3g driver if the external drive is ntfs, etc.)
 
 **COMPATIBLE DEVICES**: This **should** work on any sufficiently powerful armv7 or armv8 device that meets the above requirements, but has only been tested on a Netgear R9000 (ARMv7) and a dynalink dl-wrx36 (ARMv8).
