@@ -16,7 +16,7 @@ install_plex() {
 [ $# == 2 ] || { printf '\n\nERROR! MUST HAVE 2 INPUTS. \nUSAGE: install_plex <plex_dev> <plex_mnt>\n\n' >&2 && return 1; }
 
 # download main init.d script
-curl 'https://raw.githubusercontent.com/jkool702/openwrt-plexmediaserver/main/WRX36/etc/init.d/plexmediaserver' > /etc/init.d/plexmediaserver
+curl 'https://raw.githubusercontent.com/jkool702/openwrt-plexmediaserver/main/etc/init.d/plexmediaserver' > /etc/init.d/plexmediaserver
 chmod +x /etc/init.d/plexmediaserver
 
 # use /etc/rc.local to set up automatically starting plex on boot
