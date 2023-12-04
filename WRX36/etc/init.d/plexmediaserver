@@ -246,12 +246,17 @@ restart() {
 
 check_update() {
 
-
 	# determine URL's and tmp directories to use during the script
 	
 	plex_url="$(/sbin/uci get plexmediaserver.@main[0].plex_force_update_download_url)"
-	
-	[ -z "${plex_url}" ] && plex_url="$(curl https://plex.tv/api/downloads/5.json | sed -E s/'"id"'/'\n\n\n"id"'/g | grep asustor | sed -E s/'\{"label"'/'\n\n\n{"label"'/g | grep ARMv8 | sed -E s/'^.*"url"\:"(.*\.apk)"\,.*$'/'\1'/)"
+
+	if grep </proc/kallsyms -q 'arm64' || uname -a | grep -q aarch64; then
+		ARM_ARCH='ARMv8'
+	else
+		ARM_ARCH='ARMv7'
+	fi
+
+	[ -z "${plex_url}" ] && plex_url="$(curl https://plex.tv/api/downloads/5.json | sed -E s/'"id"'/'\n\n\n"id"'/g | grep asustor | sed -E s/'\{"label"'/'\n\n\n{"label"'/g | grep ${ARM_ARCH} | sed -E s/'^.*"url"\:"(.*\.apk)"\,.*$'/'\1'/)"
 	
 	if [ x${PLEX_VERSION} != x ] &&  [ x${plex_url} != x ] && $(echo "${plex_url}" | grep -q -F "${PLEX_VERSION}"); then
 		echo "Plex Media Server is up to date" >&2
