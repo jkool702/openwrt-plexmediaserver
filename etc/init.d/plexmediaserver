@@ -250,7 +250,7 @@ check_update() {
 	
 	plex_url="$(/sbin/uci get plexmediaserver.@main[0].plex_force_update_download_url)"
 
-	if grep </proc/kallsyms -q 'arm64' || uname -a | grep -q aarch64; then
+	if [ $(uname -m) == aarch64 ] || grep </proc/kallsyms -q 'arm64'; then
 		ARM_ARCH='ARMv8'
 	else
 		ARM_ARCH='ARMv7'
