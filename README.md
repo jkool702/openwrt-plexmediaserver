@@ -6,6 +6,7 @@ Sets up an on-router plex media server instance
 **SOFTWARE REQUIREMENTS**: the ability to unzip `*.zip` files, the ability to both create and mount XZ-compressed SquashFS filesystems, and the ability to mount the external hard drive.
 
 **IMPORTANT NOTE**: At minimum, you will need the following openwrt packages (plus their dependencies):  kmod-fs-squashfs squashfs-tools-mksquashfs kmod-usb-core kmod-usb-storage
+
 You may need additional packages as well, depending on your specific setup (e.g., the driver to run the usb port, the ntfs-3g driver if the external drive is ntfs, etc.)
 
 **COMPATIBLE DEVICES**: This **should** work on any sufficiently powerful armv7 or armv8 device that meets the above requirements, but has only been tested on a Netgear R9000 (ARMv7) and a dynalink dl-wrx36 (ARMv8).
@@ -19,6 +20,7 @@ NOTE: Everything works well except video transcoding...transcoding any video at 
 An install script (install_plex.sh) is in the top level repo directory. This will setup and install plex media server (via an init.d service) and will add something to something to `/etc/rc.local` to start plex on boot can be found [HERE](https://github.com/jkool702/openwrt-plexmediaserver/blob/main/install_plex.sh) 
 
 IMPORTANT NOTES:
+
 1. the install script requires `curl`
 2. if the external drive is NTFS and you are using the ntfs-3g driver, the mount command that the script adds to /etc/rc.local might not work. You may need to manually change `mount /dev/sdaN ______` to `ntfs-3g /dev/sdaN _______`
 
