@@ -3,11 +3,14 @@ Sets up an on-router plex media server instance
 
 **HARDWARE REQUIREMENTS**: an ARMv7 or ARMv8 device with a beefy CPU (quad-core is probably preferable), a USB port (preferably usb3+) and external hard drive (to hold the plex library) and at least 120 MB of free RAM that can be dedicated to plex media server. 
 
-**SOFTWARE REQUIREMENTS**: the ability to unzip `*.zip` files, and the ability to both create and mount XZ-compressed SquashFS filesystems
+**SOFTWARE REQUIREMENTS**: the ability to unzip `*.zip` files, the ability to both create and mount XZ-compressed SquashFS filesystems, and the ability to mount the external hard drive.
+
+At minimum, you will need the following packages (plus their dependencies):  kmod-fs-squashfs squashfs-tools-mksquashfs kmod-usb-core kmod-usb-storage
+You may need additional packages as well, depending on your specific setup (e.g., the driver to run the usb port, the ntfs-3g driver if the external drive is ntfs, etc.)
 
 **COMPATIBLE DEVICES**: This **should** work on any sufficiently powerful armv7 or armv8 device that meets the above requirements, but has only been tested on a Netgear R9000 (ARMv7) and a dynalink dl-wrx36 (ARMv8).
 
-The dynalink dl-wrx36 is probably the least expensive device ($80 at the time of writing) that can run a plex media server instance fairly well.
+The dynalink dl-wrx36 (quad core cortex-a53 @ 2.2GHz + 1gb RAM + 1x usb3 port) is probably the least expensive device ($80 at the time of writing) that can run a plex media server instance fairly well.
 
 NOTE: Everything works well except video transcoding...transcoding any video at 720p or higher resolution is going to studder with an ARM CPU. I highly recommend turning off video transcoding altogether in the plex media player settings. 
 
