@@ -33,7 +33,7 @@ EOF
 }
 
 # mount plex drive
-mount "$1" "$2"
+cat /proc/mounts | grep -q "${1} ${2}" || mount $1 $2
 
 # make plex Library root dir
 mkdir -p "${2}/.plex/Library"
