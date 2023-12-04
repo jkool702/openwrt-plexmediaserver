@@ -1,17 +1,19 @@
 # openwrt-plexmediaserver
 Sets up an on-router plex media server instance
 
-**HARDWARE REQUIREMENTS**: an ARMv7 or ARMv8 device with a beefy CPU (quad-core is probably preferable), a USB port (and external hard drive) and at least 120 MB of free RAM that can be dedicated to plex media server. 
+**HARDWARE REQUIREMENTS**: an ARMv7 or ARMv8 device with a beefy CPU (quad-core is probably preferable), a USB port (preferably usb3+) and external hard drive (to hold the plex library) and at least 120 MB of free RAM that can be dedicated to plex media server. 
 
-**SOFTWARE REQUIREMENTS**: the ability to unzip files, and the ability to both create and mount XZ-compressed SquashFS filesystems
+**SOFTWARE REQUIREMENTS**: the ability to unzip `*.zip` files, and the ability to both create and mount XZ-compressed SquashFS filesystems
 
 **COMPATIBLE DEVICES**: This **should** work on any sufficiently powerful armv7 or armv8 device that meets the above requirements, but has only been tested on a Netgear R9000 (ARMv7) and a dynalink dl-wrx36 (ARMv8).
 
-**INSTALL INSTRUCTIONS**
+# INSTALL INSTRUCTIONS
 
 An install script (install_plex.sh) is in the top level repo directory. This will setup and install plex media server (via an init.d service) and will add something to something to `/etc/rc.local` to start plex on boot can be found [HERE](https://github.com/jkool702/openwrt-plexmediaserver/blob/main/install_plex.sh) 
 
-Note: install script required `curl`
+IMPORTANT NOTES:
+1. the install script requires `curl`
+2. if the external drive is NTFS and you are using the ntfs-3g driver, the mount command that the script adds to /etc/rc.local might not work. You may need to manually change `mount /dev/sdaN ______` to `ntfs-3g /dev/sdaN _______`
 
 The easiest way to set everything up is probably to run the following on your Router:
 
@@ -28,7 +30,7 @@ After install, you can access plex from a plex media player app or from a web br
 
 ***
 
-**HOW IT WORKS**
+# HOW IT WORKS
 
 When you run `service plexmediaserver update`, it:
 
@@ -46,13 +48,13 @@ When you run `service plexmediaserver start`, it:
 
 ***
 
-**MEMORY USAGE**
+# MEMORY USAGE
 
 using an in-memory squashfs-image keeps the server responsive (since its binaries/libraries are all on a ramdisk, not the external drive) without taking up too much memory (since it is all xz-compressed). Memory usage is around 100-120mb or so, which uses up, 10-12% of the WRX36's 1gb of RAM.
 
 ***
 
-**PERFORMANCE**
+# PERFORMANCE
 
 It all works quite well, provided you turn off video transcoding in the plex settings. On my WRX36 I was streaming a HDR HEVC-encoded 4k movie to a plex app on a 4k apple TV with audio being transcoded (but not video) and had 0 dropped frames. If you need to transcode video the experience will be quite choppy on anything 720p or higher resolution....the a53 just doesnt have the processing power for realtime video transcoding.
 
