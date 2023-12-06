@@ -179,7 +179,7 @@ is_running() {
 	[ x${plex_pid} == x ] && plex_pid=-1
 
 	PLEX_PID_LIST="$(ps | grep -E '((Plex Media Server)|(Plex DLNA Server)|(PMS RunServer)|(Plex Plug-in)|(Plex Script Hos)|('"${PLEX_TMP_DIR}"')|(^ *'"${plex_pid}"'))' | grep -v grep | awk '{print $1}')"
-	[x${PLEX_PID_LIST} == x ] && return 1 
+	[ x${PLEX_PID_LIST} == x ] && return 1 
 	[ "$1" == '-pid' ] && echo "${PLEX_PID_LIST}"
 	return 0
 
