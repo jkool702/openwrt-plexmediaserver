@@ -48,7 +48,7 @@ EOF
 setup_uci() {
 	echo "setting up UCI config for plexmediaserver" >&2
 
-	[ -e /etc/config/plexmediaserver ] || touch /etc/config/plexmediaserver 
+	[ -e /etc/config/plexmediaserver ] || echo '' >> /etc/config/plexmediaserver 
 	plex_UCI="$(/sbin/uci show plexmediaserver)"
 	
 	# if plexmediaserver.@main[0] doesnt exist, scrap config and start from scratch
@@ -170,37 +170,47 @@ unpack_plex() {
 
 }
 
+is_running() {
+
+	[ x${PLEX_TMP_DIR} == x ] && PLEX_TMP_DIR="$(/sbin/uci get plexmediaserver.@main[0].plex_tmp_dir)"
+	[ x${PLEX_TMP_DIR} == x ] && PLEX_TMP_DIR='/tmp/plexmediaserver'
+
+	plex_pid="$(cat "${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid")"
+	[ x${plex_pid} == x ] && plex_pid=-1
+
+	PLEX_PID_LIST="$(ps | grep -E '((Plex Media Server)|(Plex DLNA Server)|(PMS RunServer)|(Plex Plug-in)|(Plex Script Hos)|('"${PLEX_TMP_DIR}"')|(^ *'"${plex_pid}"'))' | grep -v grep | awk '{print $1}')"
+	[ x${PLEX_PID_LIST} == x ] && return 1 
+	[ "$1" == '-pid' ] && echo "${PLEX_PID_LIST}"
+	return 0
+
+}
+
 stop() {
 
 	# setup / load config from UCI
 	setup_uci
-	
-	echo "Stopping Plex Media Server"
-	plex_pid="$(cat "${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid")"
-	
-	# kill process listed in  plexmediaserver.pid
-	if $(echo "${plex_pid}" | grep -q -E '^[0-9]+$'); then
-		kill -3 "${plex_pid}"
-		
-		echo "SIGQUIT sent to server. Waiting 3 seconds and terminating if not dead" >&2
-		sleep 3
 
-		ps | grep -q "${plex_pid}" && kill -15 "${plex_pid}" && echo "SIGTERM sent to server. Waiting 3 seconds and force killing if not dead" >&2 && sleep 3
-
+	plex_umount() {
+		cat /proc/mounts | grep plexmediaserver | grep -q squashfs && umount "${PLEX_BIN_DIR}/tmp" "${PLEX_TMP_DIR}"
 		echo "" > "${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid"
-	else
-		echo "plexmediaserver.pid file missing or invalid. Skipping straight to force killing all Plex Media Server processes" >&2
-	fi
+	}
 
-	if [ "$(ps | grep -E '((Plex Media Server)|(Plex DLNA Server)|(PMS RunServer)|(Plex Plug-in)|(Plex Script Hos)|(\/tmp\/plexmediaserver))' | grep -v grep | wc -l)" != "0" ]; then
-	# kill any remnants still running
-		echo "Force killing leftover plexmediaserver procs" >&2
-		ps | grep -E '((Plex Media Server)|(Plex DLNA Server)|(PMS RunServer)|(Plex Plug-in)|(Plex Script Hos)|(\/tmp\/plexmediaserver))' | grep -v grep | awk '{print $1}' | xargs kill -9
-	else
-		echo "Plex Media Server shutdown cleanly" >&2
-	fi
-	cat /proc/mounts | grep plexmediaserver | grep -q squashfs && umount "${PLEX_BIN_DIR}/tmp" "${PLEX_TMP_DIR}"
+	# dont kill anything is plex isnt running
+	is_running || {  echo "Plex Media Server not running" >&2; plex_umount; return; }
+		
+	echo "Stopping Plex Media Server"
+
+	# kill with `kill -3`
+	{ is_running -pid || { plex_umount; return; }; } | xargs -r kill -3 && echo echo "SIGQUIT sent to server. Waiting 3 seconds and terminating if not dead" >&2 && sleep 3
+
+	# kill with `kill -15`
+	{ is_running -pid || { echo "Plex Media Server shutdown cleanly" >&2; plex_umount; return; }; } | xargs -r kill -15 && echo echo "SIGTERM sent to server. Waiting 3 seconds and force killing if not dead" >&2 && sleep 3
+
+	# kill any remnants still running with `kill -9`
+	{ is_running -pid || { echo "Plex Media Server shutdown" >&2; plex_umount; return; }; } | xargs -r kill -9 && echo "Force killing leftover plexmediaserver processes" >&2
+
 }
+	
 
 start() {
 
@@ -247,18 +257,10 @@ restart() {
 check_update() {
 
 	# determine URL's and tmp directories to use during the script
-	
 	plex_url="$(/sbin/uci get plexmediaserver.@main[0].plex_force_update_download_url)"
-
-	if [ $(uname -m) == aarch64 ] || grep </proc/kallsyms -q 'arm64'; then
-		ARM_ARCH='ARMv8'
-	else
-		ARM_ARCH='ARMv7'
-	fi
-
-	[ -z "${plex_url}" ] && plex_url="$(curl https://plex.tv/api/downloads/5.json | sed -E s/'"id"'/'\n\n\n"id"'/g | grep asustor | sed -E s/'\{"label"'/'\n\n\n{"label"'/g | grep ${ARM_ARCH} | sed -E s/'^.*"url"\:"(.*\.apk)"\,.*$'/'\1'/)"
+	[ -z "${plex_url}" ] && plex_url="$(curl https://plex.tv/api/downloads/5.json | sed -E s/'"id"'/'\n\n\n"id"'/g | grep asustor | sed -E s/'\{"label"'/'\n\n\n{"label"'/g | grep "$({ [ $(uname -m) == aarch64 ] || grep </proc/kallsyms -q 'arm64'; } && echo ARMv8 || echo ARMv7)" | sed -E s/'^.*"url"\:"(.*\.apk)"\,.*$'/'\1'/)"
 	
-	if [ x${PLEX_VERSION} != x ] &&  [ x${plex_url} != x ] && $(echo "${plex_url}" | grep -q -F "${PLEX_VERSION}"); then
+	if [ x${PLEX_VERSION} != x ] && [ x${plex_url} != x ] && $(echo "${plex_url}" | grep -q -F "${PLEX_VERSION}"); then
 		echo "Plex Media Server is up to date" >&2
 		plex_update_available=0
 	elif $(echo "${plex_url}" | grep -q -E '^.+\/PlexMediaServer\-.+\.apk'); then

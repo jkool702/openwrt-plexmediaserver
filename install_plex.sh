@@ -13,27 +13,33 @@ install_plex() {
 # EXAMPLE:   install_plex /dev/sda2 /mnt/plex
 
 # make sure theres 2 inputs
-[ $# == 2 ] || { printf '\n\nERROR! MUST HAVE 2 INPUTS. \nUSAGE: install_plex <plex_dev> <plex_mnt>\n\n' >&2 && return 1; }
+[ $# = 2 ] || { printf '\n\nERROR! MUST HAVE 2 INPUTS. \nUSAGE: install_plex <plex_dev> <plex_mnt>\n\n' >&2 && return 1; }
+
+plex_dev="${1%/}"
+plex_mnt="${2%/}"
 
 # download main init.d script
 curl 'https://raw.githubusercontent.com/jkool702/openwrt-plexmediaserver/main/etc/init.d/plexmediaserver' > /etc/init.d/plexmediaserver
+[ -f /etc/init.d/plexmediaserver ] || { echo "ERROR downloading plexmediaserver init.d scrip. ABORTING." >&2; return 1; }
 chmod +x /etc/init.d/plexmediaserver
 
 # use /etc/rc.local to set up automatically starting plex on boot
-tr -d '\n' </etc/rc.local | grep -q 'at /proc/mounts | grep -q "'"${1} ${2}"'" || mount '"${1} ${2}"'sleep 5/etc/init.d/plexmediaserver startsleep 5ps | grep -q '"'"'Plex Media Server'"'"' || /etc/init.d/plexmediaserver start' || {
+tr -d '\n' </etc/rc.local | grep -qF 'mkdir -p "${plex_mnt}"grep -qF "${plex_dev} ${plex_mnt}" </proc/mounts || { mount "${plex_dev}" "${plex_mnt}" 2>&1 | grep -qF "unknown filesystem type '"'"'ntfs'"'"'"; } && { grep -qF '"'"'ntfs3'"'"' </proc/filesystems; } && ntfs-3g "${plex_dev}" "${plex_mnt}"sleep 2/etc/init.d/plexmediaserver startsleep 2ps | grep -q '"'"'Plex Media Server'"'"' || /etc/init.d/plexmediaserver start' || {
 cat<<EOF>>/etc/rc.local
 
-cat /proc/mounts | grep -q "${1} ${2}" || mount $1 $2
-sleep 5
+mkdir -p "${plex_mnt}"
+grep -qF "${plex_dev} ${plex_mnt}" </proc/mounts || { mount "${plex_dev}" "${plex_mnt}" 2>&1 | grep -qF "unknown filesystem type 'ntfs'"; } && { grep -qF 'ntfs3' </proc/filesystems; } && ntfs-3g "${plex_dev}" "${plex_mnt}"
+sleep 2
 /etc/init.d/plexmediaserver start
-sleep 5
+sleep 2
 ps | grep -q 'Plex Media Server' || /etc/init.d/plexmediaserver start
 
 EOF
 }
 
 # mount plex drive
-cat /proc/mounts | grep -q "${1} ${2}" || mount $1 $2
+mkdir -p "$2"
+grep -qF "${plex_dev} ${plex_mnt}" </proc/mounts || { mount "${plex_dev}" "${plex_mnt}" 2>&1 | grep -qF "unknown filesystem type 'ntfs'"; } && { grep -qF 'ntfs3' </proc/filesystems; } && ntfs-3g "${plex_dev}" "${plex_mnt}"
 
 # make plex Library root dir
 mkdir -p "${2}/.plex/Library"
@@ -55,4 +61,4 @@ printf '\nTo access Plex from a web browser, go to:       \t %s\n\n' "$(ip addr 
 
 }
 
-[ $# == 2 ] && install_plex "$1" "$2"
+[ $# = 2 ] && install_plex "$1" "$2"
