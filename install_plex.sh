@@ -15,25 +15,30 @@ install_plex() {
 # make sure theres 2 inputs
 [ $# == 2 ] || { printf '\n\nERROR! MUST HAVE 2 INPUTS. \nUSAGE: install_plex <plex_dev> <plex_mnt>\n\n' >&2 && return 1; }
 
+plex_dev="${1%/}"
+plex_mnt="${2%/}"
+
 # download main init.d script
-curl 'https://raw.githubusercontent.com/jkool702/openwrt-plexmediaserver/main/etc/init.d/plexmediaserver' > /etc/init.d/plexmediaserver
+curl 'https://raw.githubusercontent.com/jkool702/openwrt-plexmediaserver/test/etc/init.d/plexmediaserver' > /etc/init.d/plexmediaserver
 chmod +x /etc/init.d/plexmediaserver
 
 # use /etc/rc.local to set up automatically starting plex on boot
-tr -d '\n' </etc/rc.local | grep -q 'at /proc/mounts | grep -q "'"${1} ${2}"'" || mount '"${1} ${2}"'sleep 5/etc/init.d/plexmediaserver startsleep 5ps | grep -q '"'"'Plex Media Server'"'"' || /etc/init.d/plexmediaserver start' || {
+tr -d '\n' </etc/rc.local | grep -q 'mkdir -p "${plex_mnt}"cat /proc/mounts | grep -q "${plex_dev} ${plex_mnt}" || { mount "${plex_dev}" "${plex_mnt}" 2>&1 | grep -qF "unknown filesystem type '"'"'ntfs'"'"'"; } && { cat /proc/filesystems | grep -qF '"'"'ntfs3'"'"'; } && ntfs-3g "${plex_dev}" "${plex_mnt}"sleep 2/etc/init.d/plexmediaserver startsleep 2ps | grep -q '"'"'Plex Media Server'"'"' || /etc/init.d/plexmediaserver start' || {
 cat<<EOF>>/etc/rc.local
 
-cat /proc/mounts | grep -q "${1} ${2}" || mount $1 $2
-sleep 5
+mkdir -p "${plex_mnt}"
+cat /proc/mounts | grep -q "${plex_dev} ${plex_mnt}" || { mount "${plex_dev}" "${plex_mnt}" 2>&1 | grep -qF "unknown filesystem type 'ntfs'"; } && { cat /proc/filesystems | grep -qF 'ntfs3'; } && ntfs-3g "${plex_dev}" "${plex_mnt}"
+sleep 2
 /etc/init.d/plexmediaserver start
-sleep 5
+sleep 2
 ps | grep -q 'Plex Media Server' || /etc/init.d/plexmediaserver start
 
 EOF
 }
 
 # mount plex drive
-cat /proc/mounts | grep -q "${1} ${2}" || mount $1 $2
+mkdir -p "$2"
+cat /proc/mounts | grep -q "${plex_dev} ${plex_mnt}" || { mount "${plex_dev}" "${plex_mnt}" 2>&1 | grep -qF "unknown filesystem type 'ntfs'"; } && { cat /proc/filesystems | grep -qF 'ntfs3'; } && ntfs-3g "${plex_dev}" "${plex_mnt}"
 
 # make plex Library root dir
 mkdir -p "${2}/.plex/Library"
