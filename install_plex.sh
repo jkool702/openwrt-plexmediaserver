@@ -20,6 +20,7 @@ plex_mnt="${2%/}"
 
 # download main init.d script
 curl 'https://raw.githubusercontent.com/jkool702/openwrt-plexmediaserver/test/etc/init.d/plexmediaserver' > /etc/init.d/plexmediaserver
+[ -f /etc/init.d/plexmediaserver ] || { echo "ERROR downloading plexmediaserver init.d scrip. ABORTING." >&2; return 1; }
 chmod +x /etc/init.d/plexmediaserver
 
 # use /etc/rc.local to set up automatically starting plex on boot
