@@ -11,7 +11,7 @@
 #                    ---> This needs to be at "${PLEX_BROWSER_ROOT}/.plex/Library" or "${PLEX_BROWSER_ROOT}/*/.plex/Library"
 # PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR: the plex application uses this for storing metadata and stuff liker that
 #                    ---> This needs to be at "${PLEX_LIBRARY_DIR}/Application Support"
-# PLEX_COMPRESSED_ARCHIVE_PATH: this is where the plex binary and libraries (in a xz-compressed squashfs image or tar archive) are stored 
+# PLEX_COMPRESSED_ARCHIVE_PATH: this is where the plex binary and libraries (in a xz-compressed squashfs image or tar archive) are stored
 #                    For squashfs images (preffered): the sqfs image will be copied to the router's memory and then mounted
 #                    For tar archives: the archive will be decompressed and extracted onto the device memory before plex can be started
 #                    When mounted/extracted, this should produce a folder whose title identifies the plex version that contains the plex binaries (Plex Media Server) and libraries (libs/)
@@ -20,430 +20,462 @@
 #                    Should you desire (e.g., for testing a new plex release) multiple versions of plex can be used side-by-side here
 #                    ---> The default location for this is "/tmp/plexmediaserver"
 # PLEX_VERSION: The plex version in use. This is auto-determined based on the folder name that decompressing the archive with the binaries and libraries gives
-#                    If multiple versions are available, the highest version (found via `sort -Vr | head -n 1`) is used. 
+#                    If multiple versions are available, the highest version (found via `sort -Vr | head -n 1`) is used.
 #                    ---> A specific plex version can be forced using the UCI variable "plexmediaserver.@main[0].plex_force_version"
 # PLEX_BIN_DIR: The directory actually containing the (version-specific) plex binaries and libraries
 #                   ---> This will be at "${PLEX_TMP_DIR}/${PLEX_VERSION}"
-# TMPDIR: stores temp files for a specific plex instance that is running. 
+# TMPDIR: stores temp files for a specific plex instance that is running.
 #                   ---> This will be at "${PLEX_BIN_DIR}/tmp"
 #
 # # # # # NOTE: UCI variables must be setup for things to work right. If they havent been setup yet, call this script with the 1st argument set to either 'setup_uci' or 'check_uci'
-
 
 #################################################################################################################
 
 NAME='plexmediaserver'
 START=99
 STOP=99
-EXTRA_COMMANDS="setup_uci unpack_plex check_update update"
-EXTRA_HELP=$(cat<<EOF
+EXTRA_COMMANDS="setup_uci unpack_plex check_update update reset"
+EXTRA_HELP=$(cat <<EOF
         setup_uci       Does initial setup of UCI, and (if needed) downloads required plex files
         unpack_plex     Unpacks the compresssed plexmediaserver archive at /tmp/plexmediaserver/<plex_version>
         check_update    Checks if an updated Plex Media Server package is available for download
         update          Downloads Plex Media Server update (if available) and runs do_update to generate a compressed archive of it
+        reset           Wipes the plex media server config and re-generates it from scratch
 EOF
 )
 
 setup_uci() {
-	echo "setting up UCI config for plexmediaserver" >&2
+    echo "setting up / checking / loading UCI config for plexmediaserver" >&2
 
-	[ -e /etc/config/plexmediaserver ] || echo '' >> /etc/config/plexmediaserver 
-	plex_UCI="$(/sbin/uci show plexmediaserver)"
-	
-	# if plexmediaserver.@main[0] doesnt exist, scrap config and start from scratch
-	if ! echo "${plex_UCI}" | grep -Fq 'plexmediaserver.@main[0]'; then
-		/sbin/uci delete plexmediaserver; 
-		/sbin/uci add plexmediaserver main; 
-		/sbin/uci commit plexmediaserver; 
-		plex_UCI="$(/sbin/uci show plexmediaserver)"; 
-	fi
-	
-	# add (empty) config values for any missing UCI options
-	for UCI_opt in plex_library_dir plex_application_support_dir plex_browser_root plex_compressed_archive_path plex_tmp_dir plex_force_update_download_url plex_force_version plex_version plex_bin_dir; do
-		echo "${plex_UCI}" | grep -qF "${UCI_opt}" || /sbin/uci set plexmediaserver.@main[0].${UCI_opt}=''
-	done
-	
-	# commit changes
-	/sbin/uci commit plexmediaserver;
-	reload_config
+    [[ -e /etc/config/plexmediaserver ]] || echo '' >>/etc/config/plexmediaserver
+    plex_UCI="$(/sbin/uci show plexmediaserver)"
 
-	# load values from UCI
-	load_uci
-	
-}
+    # if plexmediaserver.@main[0] doesnt exist, scrap config and start from scratch
+    if ! echo "${plex_UCI}" | grep -Fq 'plexmediaserver.@main[0]'; then
+        /sbin/uci delete plexmediaserver
+        /sbin/uci add plexmediaserver main
+        /sbin/uci commit plexmediaserver
+        plex_UCI="$(/sbin/uci show plexmediaserver)"
+    fi
 
-load_uci() {
-	echo "loading and checking UCI config for plexmediaserver" >&2
+    # add (empty) config values for any missing UCI options
+    for UCI_opt in plex_library_dir plex_application_support_dir plex_browser_root plex_compressed_archive_path plex_tmp_dir plex_force_update_download_url plex_force_version plex_version plex_bin_dir; do
+        echo "${plex_UCI}" | grep -qF "${UCI_opt}" || /sbin/uci set plexmediaserver.@main[0].${UCI_opt}=''
+    done
 
-	# read identification variables from UCI
+    # read identification variables from UCI
 
-	PLEX_BROWSER_ROOT="$(/sbin/uci get plexmediaserver.@main[0].plex_browser_root)"
-	PLEX_LIBRARY_DIR="$(/sbin/uci get plexmediaserver.@main[0].plex_library_dir)"
-	PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR="$(/sbin/uci get plexmediaserver.@main[0].plex_application_support_dir)"
-	PLEX_COMPRESSED_ARCHIVE_PATH="$(/sbin/uci get plexmediaserver.@main[0].plex_compressed_archive_path)"
-	PLEX_TMP_DIR="$(/sbin/uci get plexmediaserver.@main[0].plex_tmp_dir)"
-	PLEX_VERSION="$(/sbin/uci get plexmediaserver.@main[0].plex_version)"
-	PLEX_BIN_DIR="$(/sbin/uci get plexmediaserver.@main[0].plex_bin_dir)"
+    PLEX_DRIVE_MNT="$(/sbin/uci get plexmediaserver.@main[0].plex_drive_mnt)"
+    PLEX_DRIVE_DEV="$(/sbin/uci get plexmediaserver.@main[0].plex_drive_dev)"
+    PLEX_BROWSER_ROOT="$(/sbin/uci get plexmediaserver.@main[0].plex_browser_root)"
+    PLEX_LIBRARY_DIR="$(/sbin/uci get plexmediaserver.@main[0].plex_library_dir)"
+    PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR="$(/sbin/uci get plexmediaserver.@main[0].plex_application_support_dir)"
+    PLEX_COMPRESSED_ARCHIVE_PATH="$(/sbin/uci get plexmediaserver.@main[0].plex_compressed_archive_path)"
+    PLEX_TMP_DIR="$(/sbin/uci get plexmediaserver.@main[0].plex_tmp_dir)"
+    PLEX_VERSION="$(/sbin/uci get plexmediaserver.@main[0].plex_version)"
+    PLEX_BIN_DIR="$(/sbin/uci get plexmediaserver.@main[0].plex_bin_dir)"
 
-	# check UCI variables and set empty/invalid ones to default values
+    # check UCI variables and set empty/invalid ones to default values
 
-	{ [ -z "${PLEX_BROWSER_ROOT}" ] || ! [ -e "${PLEX_BROWSER_ROOT}" ]; } && PLEX_BROWSER_ROOT="$(cat /proc/mounts | grep -E '^\/dev\/sd' | grep -Ev 'squashfs|ubifs' | sed -E s/'^\/dev\/[^ \t]*[ \t]+([^ \t]*)[ \t]+.*$'/'\1'/ | while read -r nn; do find "$nn" -maxdepth 2 -type d -name '.plex'; done | while read -r nn; do [ -e "${nn}/Library" ] && echo "$nn" | sed -E s/'\/[^\/]*$'// && break; done | head -n 1)"
-  { [ -z "${PLEX_BROWSER_ROOT}" ] || ! [ -e "${PLEX_BROWSER_ROOT}" ]; } && [ -e /etc/fstab ] && mount -a && PLEX_BROWSER_ROOT="$(cat /proc/mounts | grep -E '^\/dev\/sd' | grep -Ev 'squashfs|ubifs' | sed -E s/'^\/dev\/[^ \t]*[ \t]+([^ \t]*)[ \t]+.*$'/'\1'/ | while read -r nn; do find "$nn" -maxdepth 2 -type d -name '.plex'; done | while read -r nn; do [ -e "${nn}/Library" ] && echo "$nn" | sed -E s/'\/[^\/]*$'// && break; done | head -n 1)"
-  { [ -z "${PLEX_BROWSER_ROOT}" ] || ! [ -e "${PLEX_BROWSER_ROOT}" ]; } && {
-   	for devPath in /dev/sda*; do
-   		[[ "$devPath" == '/dev/sda' ]] && continue
-   		mkdir -p "/mnt/$(basename "$devPath")"
-   		mount "${devPath}" "/mnt/$(basename "$devPath")"
-   		PLEX_BROWSER_ROOT="$(cat /proc/mounts | grep -E '^\/dev\/sd' | grep -Ev 'squashfs|ubifs' | sed -E s/'^\/dev\/[^ \t]*[ \t]+([^ \t]*)[ \t]+.*$'/'\1'/ | while read -r nn; do find "$nn" -maxdepth 2 -type d -name '.plex'; done | while read -r nn; do [ -e "${nn}/Library" ] && echo "$nn" | sed -E s/'\/[^\/]*$'// && break; done | head -n 1)"
-   		if { [ -z "${PLEX_BROWSER_ROOT}" ] || ! [ -e "${PLEX_BROWSER_ROOT}" ]; }; then
-   			umount "/mnt/$(basename "$devPath")"
-   		else
-   			break
-   		fi
-   	done
-  }
-	{ [ -z "${PLEX_BROWSER_ROOT}" ] || ! [ -e "${PLEX_BROWSER_ROOT}" ]; } && { echo 'COULD NOT DETERMINE THE MOUNTPOINT OF THE DRIVE HOLDING THE PLEX LIBRARY. PLEASE MOUNT IT AND RESTART PLEX' >&2; exit 1; }
-	[ -n "${PLEX_BROWSER_ROOT}" ] && /sbin/uci set plexmediaserver.@main[0].plex_browser_root="${PLEX_BROWSER_ROOT}"
+    [[ -n "${PLEX_DRIVE_MNT}" ]] && [[ -n "${PLEX_DRIVE_DEV}" ]] && {
+        PLEX_DRIVE_MNT="${PLEX_DRIVE_MNT%'/'}"
+        cat /proc/mounts | grep -F "${PLEX_DRIVE_DEV}" | grep -qF " ${PLEX_DRIVE_MNT} " || mount "${PLEX_DRIVE_DEV}" "${PLEX_DRIVE_MNT}" 2>&1 | grep -qF "unknown filesystem type 'ntfs'" && cat /proc/filesystems | grep -qF 'ntfs3' && ntfs-3g mount "${PLEX_DRIVE_DEV}" "${PLEX_DRIVE_MNT}"
+    }
 
-	if { [ -z "${PLEX_LIBRARY_DIR}" ] || ! [ -e "${PLEX_LIBRARY_DIR}" ]; }; then
-		if [ -e "${PLEX_BROWSER_ROOT}/.plex/Library" ]; then
-			PLEX_LIBRARY_DIR="${PLEX_BROWSER_ROOT}/.plex/Library"
-		else
-			PLEX_LIBRARY_DIR="$(find "${PLEX_BROWSER_ROOT}" -type d -maxdepth 3 -path '*/.plex/Library' | head -n 1)"
-		fi
-		[ -n "${PLEX_LIBRARY_DIR}" ] && /sbin/uci set plexmediaserver.@main[0].plex_library_dir="${PLEX_LIBRARY_DIR}" && mkdir -p "${PLEX_LIBRARY_DIR}/Application" && mkdir -p "${PLEX_LIBRARY_DIR}/Application Support" 
-	fi
+    # attempt to automatically determine the drive with plex on it by looking for the `.plex/Library` directory
+    { [[ -z "${PLEX_BROWSER_ROOT}" ]] || ! [[ -e "${PLEX_BROWSER_ROOT}" ]]; } && PLEX_BROWSER_ROOT="$(cat /proc/mounts | grep -E '^\/dev\/sd' | grep -Ev 'squashfs|ubifs' | sed -E s/'^\/dev\/[^ \t]*[ \t]+([^ \t]*)[ \t]+.*$'/'\1'/ | while read -r nn; do find "$nn" -maxdepth 2 -type d -name '.plex'; done | while read -r nn; do [[ -e "${nn}/Library" ]] && echo "$nn" | sed -E s/'\/[^\/]*$'// && break; done | head -n 1)"
 
-	[ -z "${PLEX_TMP_DIR}" ] && {
-		PLEX_TMP_DIR="/tmp/plexmediaserver" 
-		/sbin/uci set plexmediaserver.@main[0].plex_tmp_dir="${PLEX_TMP_DIR}"
-	}
+    # if not found, try again after running `mount -a``
+    { [[ -z "${PLEX_BROWSER_ROOT}" ]] || ! [[ -e "${PLEX_BROWSER_ROOT}" ]]; } && [[ -e /etc/fstab ]] && mount -a && PLEX_BROWSER_ROOT="$(cat /proc/mounts | grep -E '^\/dev\/sd' | grep -Ev 'squashfs|ubifs' | sed -E s/'^\/dev\/[^ \t]*[ \t]+([^ \t]*)[ \t]+.*$'/'\1'/ | while read -r nn; do find "$nn" -maxdepth 2 -type d -name '.plex'; done | while read -r nn; do [[ -e "${nn}/Library" ]] && echo "$nn" | sed -E s/'\/[^\/]*$'// && break; done | head -n 1)"
 
-	mkdir -p "${PLEX_TMP_DIR}"
+    if [[ -z "${PLEX_BROWSER_ROOT}" ]]; then
+        # try to find it by mounting all /dev/sd__ block devices one at a time
+        [[ -z "${PLEX_DRIVE_MNT}" ]] && {
+            if [[ $(find /mnt -maxdepth 1 -mindepth 1 -type d | grep -vF '/mnt/plex' | wc -l) == 1 ]]; then
+                PLEX_DRIVE_MNT="$(find /mnt -maxdepth 1 -mindepth 1 -type d | grep -vF '/mnt/plex')"
+            else
+                PLEX_DRIVE_MNT='/mnt/plex'
+            fi
+        }
+        PLEX_DRIVE_MNT="${PLEX_DRIVE_MNT%'/'}"
+        echo "SETTING MOUNTPOINT OF THE EXTERNAL DRIVE HOLDING PLEX LIBRARY TO:   ${PLEX_DRIVE_MNT}" >&2 && 
+        mkdir -p "${PLEX_DRIVE_MNT}" 
+        for devPath in /dev/sd*; do
+            [[ "$devPath" == /dev/sd[a-z] ]] && continue
+            { mount "${devPath}" "${PLEX_DRIVE_MNT}" 2>&1 | grep -qF "unknown filesystem type 'ntfs'"; } && { cat /proc/filesystems | grep -qF 'ntfs3' ; } && ntfs-3g "${devPath}" "${PLEX_DRIVE_MNT}"
+            PLEX_BROWSER_ROOT="$(cat /proc/mounts | grep -E '^\/dev\/sd' | grep -Ev 'squashfs|ubifs' | sed -E s/'^\/dev\/[^ \t]*[ \t]+([^ \t]*)[ \t]+.*$'/'\1'/ | while read -r nn; do find "$nn" -maxdepth 2 -type d -name '.plex'; done | while read -r nn; do [[ -e "${nn}/Library" ]] && echo "$nn" | sed -E s/'\/[^\/]*$'// && break; done | head -n 1)"
+            if { [[ -z "${PLEX_BROWSER_ROOT}" ]] || ! [[ -e "${PLEX_BROWSER_ROOT}" ]]; }; then
+                umount "${PLEX_DRIVE_MNT}"
+            else
+                PLEX_DRIVE_DEV="${devPath}"
+                mount
+                break
+            fi
+        done
+    else
+        # browser root found --> drive is mounted. Pull out drive dev path and mount point
+        [[ -z "${PLEX_DRIVE_MNT}" ]] && PLEX_DRIVE_MNT="$(cat /proc/mounts | sed -E 's/^[^ ]* //;s/ .*$//' |  { PLEX_DRIVE_MNT=''; while read -r; do echo "${PLEX_BROWSER_ROOT}" | grep -qF "${REPLY}" && echo "${#REPLY} $REPLY"; done; } | sort -n -k1 | tail -n1 | sed -E s/'^[0-9]+ '//)"
+        [[ "${PLEX_DRIVE_MNT}" == '/' ]]  && {
+            echo 'COULD NOT DETERMINE THE MOUNTPOINT OF THE DRIVE HOLDING THE PLEX LIBRARY.' >&2
+            echo 'PLEASE MANUALLY SPECIFY DEFINE IN THE UCI CONFIG AND RESTART PLEX' >&2
+            exit 1
+        }
+        PLEX_DRIVE_DEV="$(cat /proc/mounts | grep " ${PLEX_DRIVE_MNT} " | sed -E s/'^[ \t].*$'//)"
+    fi
 
-	[ -z "${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}" ]  && {
-		PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR="${PLEX_LIBRARY_DIR}/Application Support"  
-		/sbin/uci set plexmediaserver.@main[0].plex_application_support_dir="${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}"
-	}
-  [ -e "${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}" ] || mkdir -p "${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}"
+    { [[ -z "${PLEX_BROWSER_ROOT}" ]] || ! [[ -e "${PLEX_BROWSER_ROOT}" ]]; } && {
+        echo 'COULD NOT DETERMINE THE ROOT PATH FOR THE PLEX LIBRARY.' >&2
+        echo 'PLEASE MOUNT THE DRIVE STORING THE PLEX LIBRARY AND RESTART PLEX' >&2
+        exit 1
+    }
+    [[ -n "${PLEX_BROWSER_ROOT}" ]] && /sbin/uci set plexmediaserver.@main[0].plex_browser_root="${PLEX_BROWSER_ROOT}"
+    [[ -n "${PLEX_DRIVE_MNT}" ]] && /sbin/uci set plexmediaserver.@main[0].plex_drive_mnt="${PLEX_DRIVE_MNT}"
+    [[ -n "${PLEX_DRIVE_DEV}" ]] && /sbin/uci set plexmediaserver.@main[0].plex_drive_dev="${PLEX_DRIVE_DEV}"
+    
+    
+    if { [[ -z "${PLEX_LIBRARY_DIR}" ]] || ! [[ -e "${PLEX_LIBRARY_DIR}" ]]; }; then
+        if [[ -e "${PLEX_BROWSER_ROOT}/.plex/Library" ]]; then
+            PLEX_LIBRARY_DIR="${PLEX_BROWSER_ROOT}/.plex/Library"
+        else
+            PLEX_LIBRARY_DIR="$(find "${PLEX_BROWSER_ROOT}" -type d -maxdepth 3 -path '*/.plex/Library' | head -n 1)"
+        fi
+        [[ -n "${PLEX_LIBRARY_DIR}" ]] && {
+            /sbin/uci set plexmediaserver.@main[0].plex_library_dir="${PLEX_LIBRARY_DIR}"
+            mkdir -p "${PLEX_LIBRARY_DIR}/Application" && mkdir -p "${PLEX_LIBRARY_DIR}/Application Support"
+        }
+    fi
 
-  [ -z "${PLEX_COMPRESSED_ARCHIVE_PATH}" ] && { 
-		[ -e "${PLEX_LIBRARY_DIR}/Application/plexmediaserver.txz" ] && PLEX_COMPRESSED_ARCHIVE_PATH="${PLEX_LIBRARY_DIR}/Application/plexmediaserver.txz" || PLEX_COMPRESSED_ARCHIVE_PATH="${PLEX_LIBRARY_DIR}/Application/plexmediaserver.sqfs"
-		/sbin/uci set plexmediaserver.@main[0].plex_compressed_archive_path="${PLEX_COMPRESSED_ARCHIVE_PATH}"
-	}
-  [ -d "$(dirname "${PLEX_COMPRESSED_ARCHIVE_PATH}")" ] || mkdir -p "$(dirname "${PLEX_COMPRESSED_ARCHIVE_PATH}")"
+    [[ -z "${PLEX_TMP_DIR}" ]] && {
+        PLEX_TMP_DIR="/tmp/plexmediaserver"
+        /sbin/uci set plexmediaserver.@main[0].plex_tmp_dir="${PLEX_TMP_DIR}"
+    }
 
-	/sbin/uci commit plexmediaserver
-	reload_config 
+    mkdir -p "${PLEX_TMP_DIR}"
 
-	[ -e "${PLEX_COMPRESSED_ARCHIVE_PATH}" ] || { check_update -n && do_update; }
+    [[ -z "${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}" ]] && {
+        PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR="${PLEX_LIBRARY_DIR}/Application Support"
+        /sbin/uci set plexmediaserver.@main[0].plex_application_support_dir="${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}"
+    }
+    [[ -e "${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}" ]] || mkdir -p "${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}"
+
+    [[ -z "${PLEX_COMPRESSED_ARCHIVE_PATH}" ]] && {
+        [[ -e "${PLEX_LIBRARY_DIR}/Application/plexmediaserver.txz" ]] && PLEX_COMPRESSED_ARCHIVE_PATH="${PLEX_LIBRARY_DIR}/Application/plexmediaserver.txz" || PLEX_COMPRESSED_ARCHIVE_PATH="${PLEX_LIBRARY_DIR}/Application/plexmediaserver.sqfs"
+        /sbin/uci set plexmediaserver.@main[0].plex_compressed_archive_path="${PLEX_COMPRESSED_ARCHIVE_PATH}"
+    }
+    [[ -d "$(dirname "${PLEX_COMPRESSED_ARCHIVE_PATH}")" ]] || mkdir -p "$(dirname "${PLEX_COMPRESSED_ARCHIVE_PATH}")"
+
+    /sbin/uci commit plexmediaserver
+
+    [[ -e "${PLEX_COMPRESSED_ARCHIVE_PATH}" ]] || {
+        check_update -n
+        ${plex_update_available} && do_update
+    }
 
 }
 
 unpack_plex() {
-	
-	# setup / load config from UCI
-	setup_uci
-	
-	# decompress Plex Binaries and Libs from plexmediaserver.txz
-	{ [ -z "${PLEX_BIN_DIR}" ] || [ -z "${PLEX_VERSION}" ] || [ \! -f "${PLEX_BIN_DIR}/Plex Media Server" ]; } && echo "Preparing plexmediaserver for use - extracting plex binaries and library files" >&2 || return 0
-	if [ "${PLEX_COMPRESSED_ARCHIVE_PATH}" == *.txz ] || [ "${PLEX_COMPRESSED_ARCHIVE_PATH}" == *.tar.xz ]; then
-		xz -dc "${PLEX_COMPRESSED_ARCHIVE_PATH}" | tar -C "${PLEX_TMP_DIR}" -xf -
-	else
-		[ x"${PLEX_COMPRESSED_ARCHIVE_PATH}"  == x ] && return 1
-		cp "${PLEX_COMPRESSED_ARCHIVE_PATH}" "${PLEX_TMP_DIR}" 
-		sleep 1
-		mount -t squashfs -o ro,relatime "${PLEX_TMP_DIR}/$(basename "${PLEX_COMPRESSED_ARCHIVE_PATH}")" "${PLEX_TMP_DIR}"
-		sleep 1
-		for nn in  "${PLEX_TMP_DIR}"/*/tmp; do
-			grep -F "$nn" </proc/mounts || mount -t tmpfs tmpfs "${nn}"
-		done
-	fi
-	
-	# set a few more UCI variables now that we have unpacked plex and know the plex version 
-	ls -1 "${PLEX_TMP_DIR}" | grep -q -E '^[0-9]+\..*$' && PLEX_VERSION="$(ls -1 "${PLEX_TMP_DIR}" | grep -E '^[0-9]+\..*$' | sort -Vr | head -n 1)" && /sbin/uci set plexmediaserver.@main[0].plex_version="${PLEX_VERSION}"
-	[ -n "$(/sbin/uci get plexmediaserver.@main[0].plex_force_version)" ] &&  [ -e "${PLEX_TMP_DIR}/$(/sbin/uci get plexmediaserver.@main[0].plex_force_version)" ] && PLEX_VERSION="$(/sbin/uci get plexmediaserver.@main[0].plex_force_version)" && /sbin/uci set plexmediaserver.@main[0].plex_version="${PLEX_VERSION}"
-	
-	PLEX_BIN_DIR="${PLEX_TMP_DIR}/${PLEX_VERSION}" && /sbin/uci set plexmediaserver.@main[0].plex_bin_dir="${PLEX_BIN_DIR}"
-	[ "${PLEX_COMPRESSED_ARCHIVE_PATH}" == *.txz ] && mkdir -p "${PLEX_BIN_DIR}/tmp"
 
-	/sbin/uci commit plexmediaserver
-	reload_config
+    # setup / load config from UCI
+    setup_uci
+
+    # decompress Plex Binaries and Libs from plexmediaserver.txz
+    { [[ -z "${PLEX_BIN_DIR}" ]] || [[ -z "${PLEX_VERSION}" ]] || [[ \! -f "${PLEX_BIN_DIR}/Plex Media Server" ]]; } && echo "Preparing plexmediaserver for use - extracting plex binaries and library files" >&2 || return 0
+    if [[ "${PLEX_COMPRESSED_ARCHIVE_PATH}" == *.txz ]] || [[ "${PLEX_COMPRESSED_ARCHIVE_PATH}" == *.tar.xz ]]; then
+        xz -dc "${PLEX_COMPRESSED_ARCHIVE_PATH}" | tar -C "${PLEX_TMP_DIR}" -xf -
+    else
+        [[ x"${PLEX_COMPRESSED_ARCHIVE_PATH}" == x ]] && return 1
+        cp "${PLEX_COMPRESSED_ARCHIVE_PATH}" "${PLEX_TMP_DIR}"
+        sleep 1
+        mount -t squashfs -o ro,relatime "${PLEX_TMP_DIR}/$(basename "${PLEX_COMPRESSED_ARCHIVE_PATH}")" "${PLEX_TMP_DIR}"
+        sleep 1
+        for nn in "${PLEX_TMP_DIR}"/*/tmp; do
+            grep -F "$nn" </proc/mounts || mount -t tmpfs tmpfs "${nn}"
+        done
+    fi
+
+    # set a few more UCI variables now that we have unpacked plex and know the plex version
+    ls -1 "${PLEX_TMP_DIR}" | grep -q -E '^[0-9]+\..*$' && PLEX_VERSION="$(ls -1 "${PLEX_TMP_DIR}" | grep -E '^[0-9]+\..*$' | sort -Vr | head -n 1)" && /sbin/uci set plexmediaserver.@main[0].plex_version="${PLEX_VERSION}"
+    [[ -n "$(/sbin/uci get plexmediaserver.@main[0].plex_force_version)" ]] && [[ -e "${PLEX_TMP_DIR}/$(/sbin/uci get plexmediaserver.@main[0].plex_force_version)" ]] && PLEX_VERSION="$(/sbin/uci get plexmediaserver.@main[0].plex_force_version)" && /sbin/uci set plexmediaserver.@main[0].plex_version="${PLEX_VERSION}"
+
+    PLEX_BIN_DIR="${PLEX_TMP_DIR}/${PLEX_VERSION}" && /sbin/uci set plexmediaserver.@main[0].plex_bin_dir="${PLEX_BIN_DIR}"
+    [[ "${PLEX_COMPRESSED_ARCHIVE_PATH}" == *.txz ]] && mkdir -p "${PLEX_BIN_DIR}/tmp"
+
+    /sbin/uci commit plexmediaserver
+    #reload_config
 
 }
 
 is_running() {
 
-	[ x${PLEX_TMP_DIR} == x ] && PLEX_TMP_DIR="$(/sbin/uci get plexmediaserver.@main[0].plex_tmp_dir)"
-	[ x${PLEX_TMP_DIR} == x ] && PLEX_TMP_DIR='/tmp/plexmediaserver'
+    [[ x${PLEX_TMP_DIR} == x ]] && PLEX_TMP_DIR="$(/sbin/uci get plexmediaserver.@main[0].plex_tmp_dir)"
+    [[ x${PLEX_TMP_DIR} == x ]] && PLEX_TMP_DIR='/tmp/plexmediaserver'
 
-	plex_pid="$(cat "${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid")"
-	[ x${plex_pid} == x ] && plex_pid=-1
+    plex_pid="$(cat "${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid")"
+    [[ x${plex_pid} == x ]] && plex_pid=-1
 
-	PLEX_PID_LIST="$(ps | grep -E '((Plex Media Server)|(Plex DLNA Server)|(PMS RunServer)|(Plex Plug-in)|(Plex Script Hos)|('"${PLEX_TMP_DIR}"')|(^ *'"${plex_pid}"'))' | grep -v grep | awk '{print $1}')"
-	[ x${PLEX_PID_LIST} == x ] && { plex_is_running=false; return 1; } 
-	plex_is_running=true
-	[ "$1" == '-p' ] && echo "${PLEX_PID_LIST}"
-	return 0
+    PLEX_PID_LIST="$(ps | grep -E '((Plex Media Server)|(Plex DLNA Server)|(PMS RunServer)|(Plex Plug-in)|(Plex Script Hos)|('"${PLEX_TMP_DIR}"')|(^ *'"${plex_pid}"'))' | grep -v grep | awk '{print $1}')"
+    [[ x${PLEX_PID_LIST} == x ]] && {
+        plex_is_running=false
+        return 1
+    }
+    plex_is_running=true
+    [[ "$1" == '-p' ]] && echo "${PLEX_PID_LIST}"
+    return 0
 
 }
 
 plex_umount() {
 
-    { [ x${PLEX_BIN_DIR} == x ] || [ x${PLEX_TMP_DIR} == x ]; } && setup_uci
+    { [[ x${PLEX_BIN_DIR} == x ]] || [[ x${PLEX_TMP_DIR} == x ]]; } && setup_uci
 
-	cat /proc/mounts | grep plexmediaserver | grep -q squashfs && {
-		umount "${PLEX_BIN_DIR}/tmp" 
-		umount "${PLEX_TMP_DIR}"
-	}
-	echo "" > "${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid"
-    
+    cat /proc/mounts | grep plexmediaserver | grep -q squashfs && {
+        umount "${PLEX_BIN_DIR}/tmp"
+        umount "${PLEX_TMP_DIR}"
+    }
+    echo "" >"${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid"
+
 }
 
 stop() {
 
-	# setup / load config from UCI
-	setup_uci
+    # setup / load config from UCI
+    setup_uci
 
-
-	# dont kill anything is plex isnt running. if it is running send SIGQUIT
-	is_running -p >"${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid"
+    # dont kill anything is plex isnt running. if it is running send SIGQUIT
+    is_running -p >"${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid"
     if ${plex_is_running}; then
         echo "Stopping Plex Media Server (sending SIGQUIT)" >&2
         kill -3 $(cat "${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid" | sort -u)
-        echo "SIGQUIT sent to server...waiting 3 seconds and sending SIGTERM if not dead" >&2;
+        echo "SIGQUIT sent to server...waiting 3 seconds and sending SIGTERM if not dead" >&2
         sleep 3
     else
-        echo "Plex Media Server not running" >&2; 
-        [[ "$1" == -n ]] || plex_umount; 
+        echo "Plex Media Server not running" >&2
+        [[ "$1" == -n ]] || plex_umount
         return 0
     fi
-		
-	# if SIGQUIT didnt work then send SIGTERM
-	is_running -p >"${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid"
+
+    # if SIGQUIT didnt work then send SIGTERM
+    is_running -p >"${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid"
     if ${plex_is_running}; then
         echo "Plex Media Server is still running...SIGQUIT didnt work"
         echo "Stopping Plex Media Server -- 2nd attempt (sending SIGTERM)" >&2
         kill -15 $(cat "${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid" | sort -u)
-        echo "SIGTERM sent to Plex Media Server...waiting 3 seconds and sending SIGKILL if not dead" >&2;
+        echo "SIGTERM sent to Plex Media Server...waiting 3 seconds and sending SIGKILL if not dead" >&2
         sleep 3
     else
-        echo "Plex Media Server shut down cleanly" >&2; 
-        [[ "$1" == -n ]] || plex_umount; 
+        echo "Plex Media Server shut down cleanly" >&2
+        [[ "$1" == -n ]] || plex_umount
         return 0
     fi
-    		
-	# if SIGTERM didnt work then send SIGKILL
-	is_running -p >"${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid"
+
+    # if SIGTERM didnt work then send SIGKILL
+    is_running -p >"${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid"
     if ${plex_is_running}; then
         echo "Plex Media Server is still running...SIGTERM didnt work"
         echo "Stopping Plex Media Server -- 3rd attempt (sending SIGKILL)" >&2
         kill -9 $(cat "${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid" | sort -u)
-        echo "SIGKILL sent to Plex Media Server." >&2;
+        echo "SIGKILL sent to Plex Media Server." >&2
         sleep 3
     else
-        echo "Plex Media Server was terminated" >&2; 
-        [[ "$1" == -n ]] || plex_umount; 
+        echo "Plex Media Server was terminated" >&2
+        [[ "$1" == -n ]] || plex_umount
         return 0
     fi
-    
+
     is_running -p >"${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid"
     if ${plex_is_running}; then
         echo "Plex Media Server is still running after being sent SIGKILL. Something is probably wrong." >&2
         echo "You will need to manually kill Plex Media Server. Aborting." >&2
         exit 1
     else
-        echo "Plex Media Server was killed" >&2; 
-        [[ "$1" == -n ]] || plex_umount; 
+        echo "Plex Media Server was killed" >&2
+        [[ "$1" == -n ]] || plex_umount
         return 0
-    fi    
-  
+    fi
+
 }
-	
 
 start() {
 
-	# setup / load config from UCI
-	# run unpack operation if plex binary not found
+    # setup / load config from UCI
+    # run unpack operation if plex binary not found
 
-	unpack_plex
+    unpack_plex
 
-	echo "Starting Plex Media Server" >&2
-	echo "To access Plex from a web browser, go to: $(ip addr show br-lan | grep 'inet '| sed -E s/'^.*inet (.*)\/.*$'/'\1'/):32400/web" >&2
-	
-	# export identification variables
-	export PLEX_MEDIA_SERVER_INFO_VENDOR="$(grep \"id\": /etc/board.json | awk -F:\  '{print $2}' | tr -d \" | awk -F, '{print $1}')"
-	export PLEX_MEDIA_SERVER_INFO_DEVICE="$(grep \"id\": /etc/board.json | awk -F:\  '{print $2}' | tr -d \" | awk -F, '{print $2}')"
-	export PLEX_MEDIA_SERVER_INFO_MODEL="$(uname -m)"
-	export PLEX_MEDIA_SERVER_INFO_PLATFORM_VERSION="$(grep ^NAME= /etc/os-release | awk -F= '{print $2}' | tr -d \")"
-	export PLEX_MEDIA_SERVER_HOME="${PLEX_BIN_DIR}"
-	export PLEX_MEDIA_SERVER_MAX_PLUGIN_PROCS=6
-	export PLEX_MEDIA_SERVER_DISABLE_AUTOUPDATES=1
-	export PLEX_MEDIA_SERVER_DEFAULT_PREFERENCES="ScannerLowPriority=true&DlnaEnabled=false&TranscoderVideoResolutionLimit=1280x720&TranscoderH264Preset=ultrafast"
-	export LC_ALL="C"
-	export LANG="C"
-	export TMPDIR="${PLEX_BIN_DIR}/tmp"
-	export PLEX_BIN_DIR="${PLEX_BIN_DIR}"
-	export PLEX_TMP_DIR="${PLEX_TMP_DIR}"
-	export PLEX_LIBRARY_DIR="${PLEX_LIBRARY_DIR}"
-	export PLEX_VERSION="${PLEX_VERSION}"
-	export PLEX_BROWSER_ROOT="${PLEX_BROWSER_ROOT}"
-	export PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR="${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}"
+    echo "Starting Plex Media Server" >&2
+    echo "To access Plex from a web browser, go to: $(ip addr show br-lan | grep 'inet ' | sed -E s/'^.*inet (.*)\/.*$'/'\1'/):32400/web" >&2
 
-	cd "${PLEX_BIN_DIR}"
-	"${PLEX_BIN_DIR}/Plex Media Server" & 
+    # export identification variables
+    export PLEX_MEDIA_SERVER_INFO_VENDOR="$(grep \"id\": /etc/board.json | awk -F:\  '{print $2}' | tr -d \" | awk -F, '{print $1}')"
+    export PLEX_MEDIA_SERVER_INFO_DEVICE="$(grep \"id\": /etc/board.json | awk -F:\  '{print $2}' | tr -d \" | awk -F, '{print $2}')"
+    export PLEX_MEDIA_SERVER_INFO_MODEL="$(uname -m)"
+    export PLEX_MEDIA_SERVER_INFO_PLATFORM_VERSION="$(grep ^NAME= /etc/os-release | awk -F= '{print $2}' | tr -d \")"
+    export PLEX_MEDIA_SERVER_HOME="${PLEX_BIN_DIR}"
+    export PLEX_MEDIA_SERVER_MAX_PLUGIN_PROCS=6
+    export PLEX_MEDIA_SERVER_DISABLE_AUTOUPDATES=1
+    export PLEX_MEDIA_SERVER_DEFAULT_PREFERENCES="ScannerLowPriority=true&DlnaEnabled=false&TranscoderVideoResolutionLimit=1280x720&TranscoderH264Preset=ultrafast"
+    export LC_ALL="C"
+    export LANG="C"
+    export TMPDIR="${PLEX_BIN_DIR}/tmp"
+    export PLEX_BIN_DIR="${PLEX_BIN_DIR}"
+    export PLEX_TMP_DIR="${PLEX_TMP_DIR}"
+    export PLEX_LIBRARY_DIR="${PLEX_LIBRARY_DIR}"
+    export PLEX_VERSION="${PLEX_VERSION}"
+    export PLEX_BROWSER_ROOT="${PLEX_BROWSER_ROOT}"
+    export PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR="${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}"
+
+    cd "${PLEX_BIN_DIR}"
+    "${PLEX_BIN_DIR}/Plex Media Server" &
 }
 
 restart() {
 
-  stop
-  sleep 2
-  stop
-  sleep 2
-  start
+    stop
+    sleep 2
+    stop
+    sleep 2
+    start
 }
 
 reload() {
 
-  stop -n
-  sleep 2
-  stop -n
-  sleep 2
-  start
+    stop -n
+    sleep 2
+    stop -n
+    sleep 2
+    start
 }
 
 reset() {
-  stop
-  sleep 2
-  stop
-  sleep 2
-  rm -f /etc/config/plexmediaserver
-  sleep 2
-  reload_config
-  setup_uci
-  sleep 2
-  start
+    stop
+    sleep 2
+    stop
+    sleep 2
+    rm -f /etc/config/plexmediaserver
+    sleep 2
+    #reload_config
+    setup_uci
+    sleep 2
+    update -f
+    sleep 2 
+    start
 }
 
 check_update() {
 
-	[ "$1" == '-n' ] || setup_uci
+    [[ "$1" == '-n' ]] || setup_uci
 
-	# determine URL's and tmp directories to use during the script
-	plex_url="$(/sbin/uci get plexmediaserver.@main[0].plex_force_update_download_url)"
-	[ -z "${plex_url}" ] && plex_url="$(curl https://plex.tv/api/downloads/5.json | sed -E s/'"id"'/'\n\n\n"id"'/g | grep asustor | sed -E s/'\{"label"'/'\n\n\n{"label"'/g | grep "$({ [ $(uname -m) == aarch64 ] || grep </proc/kallsyms -q 'arm64'; } && echo ARMv8 || echo ARMv7)" | sed -E s/'^.*"url"\:"(.*\.apk)"\,.*$'/'\1'/)"
-	
-	if [ x${PLEX_VERSION} != x ] && [ x${plex_url} != x ] && $(echo "${plex_url}" | grep -q -F "${PLEX_VERSION}"); then
-		echo "Plex Media Server is up to date" >&2
-		echo "Current version:   ${PLEX_VERSION}" >&2
-		plex_update_available=false
-		return 0
-	elif $(echo "${plex_url}" | grep -q -E '^.+\/PlexMediaServer\-.+\.apk'); then
-		echo -e "An Update for Plex Media Server is available!!\n\nCurrent version:  ${PLEX_VERSION}\nNew Version:      $(echo "$plex_url" | sed -E s/'^.*\/PlexMediaServer-(.*)\.apk$'/'\1'/)\n" >&2
-		plex_update_available=true
-		return 0
-	else
-		echo "Download url for downloading an update to plex was not resolved. The download url can be manually specified via the plexmediasserver UCI variable 'plex_force_update_download_url'" >&2
-		plex_update_available=false
-		return 1
-	fi
+    # determine URL's and tmp directories to use during the script
+    plex_url="$(/sbin/uci get plexmediaserver.@main[0].plex_force_update_download_url)"
+    [[ -z "${plex_url}" ]] && plex_url="$(curl https://plex.tv/api/downloads/5.json | sed -E s/'"id"'/'\n\n\n"id"'/g | grep asustor | sed -E s/'\{"label"'/'\n\n\n{"label"'/g | grep "$({ [[ $(uname -m) == aarch64 ]] || grep </proc/kallsyms -q 'arm64'; } && echo ARMv8 || echo ARMv7)" | sed -E s/'^.*"url"\:"(.*\.apk)"\,.*$'/'\1'/)"
+
+    if [[ x${PLEX_VERSION} != x ]] && [[ x${plex_url} != x ]] && $(echo "${plex_url}" | grep -q -F "${PLEX_VERSION}"); then
+        echo "Plex Media Server is up to date" >&2
+        echo "Current version:   ${PLEX_VERSION}" >&2
+        plex_update_available=false
+        return 0
+    elif $(echo "${plex_url}" | grep -q -E '^.+\/PlexMediaServer\-.+\.apk'); then
+        echo "An Update for Plex Media Server is available!!" >&2
+	echo "Current version:  ${PLEX_VERSION}" >&2
+	echo "New Version:      $(echo "$plex_url" | sed -E s/'^.*\/PlexMediaServer-(.*)\.apk$'/'\1'/)\n" >&2
+        plex_update_available=true
+        return 0
+    else
+        echo "Download url for downloading an update to plex was not resolved. The download url can be manually specified via the plexmediasserver UCI variable 'plex_force_update_download_url'" >&2
+        plex_update_available=false
+        return 1
+    fi
 }
 
 update() {
 
-	check_update 
-	${plex_update_available} && do_update
+    check_update && { ${plex_update_available} || [[ "$1" == '-f' ]]; } && do_update
 
 }
 
 do_update() {
 
-# This script downloads a armv8 NAS plexmediaserver package extracts it then generates an xz-xcompressed squashfs image out of it
-#
-# The following variables *might* need to be manually altered in some situations
-#
-# 'plex_archive_type' : extension to use for archive. Allowable values are:
-#	'xz' or 'tar.xz' or 'txz' produces a *.tar.xz archive
-# 	'sqfs' produces a squashfs archive (THIS IS PREFFERED AND IS THE DEFAULT)
-# 	'both' produces both
-#
-# `plex_tmp` is the tmp/working directory and where the generated archive will be output to. 
-# 	It must be on a filesystem with enough free space to hold the downloaded plex files.
-# 	    It needs to hold a compressed and uncompressed copy of the plex package 
-# 	     --> a few hundred MB max data usage (so it might or might not fit in RAM)
-# 	If set in UCI, "plex_compressed_archive_path" is used (since this is where the generated archive needs to go). Otherwise, /tmp/plex_tmp is used.
-#
-# `plex_url` is the download link for the up-to-date plex version to use. By default it tries to fetch the latest asustor armv7neon plex packagee released.
+    # This script downloads a armv8 NAS plexmediaserver package extracts it then generates an xz-xcompressed squashfs image out of it
+    #
+    # The following variables *might* need to be manually altered in some situations
+    #
+    # 'plex_archive_type' : extension to use for archive. Allowable values are:
+    #	'xz' or 'tar.xz' or 'txz' produces a *.tar.xz archive
+    # 	'sqfs' produces a squashfs archive (THIS IS PREFFERED AND IS THE DEFAULT)
+    # 	'both' produces both
+    #
+    # `plex_tmp` is the tmp/working directory and where the generated archive will be output to.
+    # 	It must be on a filesystem with enough free space to hold the downloaded plex files.
+    # 	    It needs to hold a compressed and uncompressed copy of the plex package
+    # 	     --> a few hundred MB max data usage (so it might or might not fit in RAM)
+    # 	If set in UCI, "plex_compressed_archive_path" is used (since this is where the generated archive needs to go). Otherwise, /tmp/plex_tmp is used.
+    #
+    # `plex_url` is the download link for the up-to-date plex version to use. By default it tries to fetch the latest asustor armv7neon plex packagee released.
 
+    # set/check archive type
+    plex_archive_type="$(/sbin/uci get plexmediaserver.@main[0].plex_compressed_archive_path | sed -E s/'^.*\.((sqfs)|(tgx)|(tar.gz))'/'\1'/)"
+    { [[ -z ${plex_archive_type} ]] || [[ ${plex_archive_type} == 'squashfs' ]]; } && plex_archive_type='sqfs'
+    { [[ "${plex_archive_type}" == 'txz' ]] || [[ "${plex_archive_type}" == 'tar.xz' ]]; } && plex_archive_type='txz'
+    { [[ "${plex_archive_type}" == 'txz' ]] || [[ "${plex_archive_type}" == 'sqfs' ]]; } || plex_archive_type='both'
 
-	# set/check archive type
-	plex_archive_type="$(/sbin/uci get plexmediaserver.@main[0].plex_compressed_archive_path | sed -E s/'^.*\.((sqfs)|(tgx)|(tar.gz))'/'\1'/)"
-	{ [ -z ${plex_archive_type} ] || [ ${plex_archive_type} == 'squashfs' ]; } && plex_archive_type='sqfs'
-	{ [ "${plex_archive_type}" == 'txz' ] || [ "${plex_archive_type}" == 'tar.xz' ]; } && plex_archive_type='txz'
-	{ [ "${plex_archive_type}" == 'txz' ] || [ "${plex_archive_type}" == 'sqfs' ]; } || plex_archive_type='both'
-			
-		
-	if [ -n "$(/sbin/uci get plexmediaserver.@main[0].plex_compressed_archive_path)" ]; then
-		plex_tmp="$(dirname "$(/sbin/uci get plexmediaserver.@main[0].plex_compressed_archive_path)")" 
-	else
-		plex_tmp=/tmp/plex_tmp
-	fi
-	
-	kk=0
-	while [ -e "${plex_tmp}/${kk}" ]; do
-		kk=$(( ${kk} + 1 ))
-	done
-	mkdir -p "${plex_tmp}/${kk}"
-		
-	cd "${plex_tmp}/${kk}"
-	
-	# download (up-to-date) plex version
-	
-	wget "${plex_url}"
-		
-	plex_filename="${plex_tmp}/${kk}/$(echo "${plex_url}" | sed -E s/'^.*\/'// | sed -E s/'\.apk$'//)"
-	
-	mv "${plex_filename}.apk" "${plex_filename}.zip"
-	unzip "${plex_filename}.zip"
-	
-	plex_ver="$(echo "${plex_filename}" | sed -E s/'^.*PlexMediaServer\-'//)"
-	mkdir "${plex_tmp}/${kk}/${plex_ver}"
-	mv data.tar.gz  "${plex_tmp}/${kk}/${plex_ver}"
-	cd "${plex_tmp}/${kk}/${plex_ver}"
-	
-	gzip -dc "${plex_tmp}/${kk}/${plex_ver}/data.tar.gz" | tar -x
-	mv "${plex_tmp}/${kk}/${plex_ver}/data.tar.gz" "${plex_tmp}/${kk}"
-	cd "${plex_tmp}/${kk}"
-	
-	[ -f "${plex_tmp}/plexmediaserver.${plex_archive_type}" ] && mv -f "${plex_tmp}/plexmediaserver.${plex_archive_type}" "${plex_tmp}/plexmediaserver.${plex_archive_type}.old"
-	
-	mkdir -p "${plex_tmp}/${kk}/${plex_ver}/tmp"
-	{ [ "${plex_archive_type}" == 'txz' ] || [ "${plex_archive_type}" == 'both' ]; } && tar -cvOf - "${plex_ver}" | xz -6e -zc > "${plex_tmp}/plexmediaserver.txz"
-	{ [ "${plex_archive_type}" == 'sqfs' ] || [ "${plex_archive_type}" == 'both' ]; } && mksquashfs "${plex_ver}" "plexmediaserver.sqfs" -all-root -keep-as-directory -comp xz
-	
-	mkdir -p "${plex_tmp}/old"
-	mv "${plex_tmp}/plexmediaserver."* "${plex_tmp}/old"
-	
-	mv "${plex_tmp}/${kk}/plexmediaserver.sqfs" "${plex_tmp}"
-		
-	cd "${plex_tmp}"
-	
-	rm -rf "${plex_tmp}/${kk}"
-	
-	{ [ "${plex_archive_type}" == 'sqfs' ] || [ "${plex_archive_type}" == 'both' ]; } && [ -e "${plex_tmp}/plexmediaserver.sqfs" ] && echo "Plex Media Server XZ-compresssed SquashFS (.sqfs) archive generated!. Archive is located at: ${plex_tmp}/plexmediaserver.sqfs" >&2
-	{ [ "${plex_archive_type}" == 'txz' ] || [ "${plex_archive_type}" == 'both' ]; } && [ -e "${plex_tmp}/plexmediaserver.txz" ] && echo "Plex Media Server XZ compressed TAR (.txz) archive generated!. Archive is located at: ${plex_tmp}/plexmediaserver.txz}" >&2
+    if [[ -n "$(/sbin/uci get plexmediaserver.@main[0].plex_compressed_archive_path)" ]]; then
+        plex_tmp="$(dirname "$(/sbin/uci get plexmediaserver.@main[0].plex_compressed_archive_path)")"
+    else
+        plex_tmp=/tmp/plex_tmp
+    fi
 
-	stop
-	sleep 1
-	stop
-	sleep 1
-	sync
-        start
-	sleep 1
+    kk=0
+    while [[ -e "${plex_tmp}/${kk}" ]]; do
+        kk=$((${kk} + 1))
+    done
+    mkdir -p "${plex_tmp}/${kk}"
 
-	exit
-	
+    cd "${plex_tmp}/${kk}"
+
+    # download (up-to-date) plex version
+
+    wget "${plex_url}"
+
+    plex_filename="${plex_tmp}/${kk}/$(echo "${plex_url}" | sed -E s/'^.*\/'// | sed -E s/'\.apk$'//)"
+
+    mv "${plex_filename}.apk" "${plex_filename}.zip"
+    unzip "${plex_filename}.zip"
+
+    plex_ver="$(echo "${plex_filename}" | sed -E s/'^.*PlexMediaServer\-'//)"
+    mkdir "${plex_tmp}/${kk}/${plex_ver}"
+    mv data.tar.gz "${plex_tmp}/${kk}/${plex_ver}"
+    cd "${plex_tmp}/${kk}/${plex_ver}"
+
+    gzip -dc "${plex_tmp}/${kk}/${plex_ver}/data.tar.gz" | tar -x
+    mv "${plex_tmp}/${kk}/${plex_ver}/data.tar.gz" "${plex_tmp}/${kk}"
+    cd "${plex_tmp}/${kk}"
+
+    [[ -f "${plex_tmp}/plexmediaserver.${plex_archive_type}" ]] && mv -f "${plex_tmp}/plexmediaserver.${plex_archive_type}" "${plex_tmp}/plexmediaserver.${plex_archive_type}.old"
+
+    mkdir -p "${plex_tmp}/${kk}/${plex_ver}/tmp"
+    { [[ "${plex_archive_type}" == 'txz' ]] || [[ "${plex_archive_type}" == 'both' ]]; } && tar -cvOf - "${plex_ver}" | xz -6e -zc >"${plex_tmp}/plexmediaserver.txz"
+    { [[ "${plex_archive_type}" == 'sqfs' ]] || [[ "${plex_archive_type}" == 'both' ]]; } && mksquashfs "${plex_ver}" "plexmediaserver.sqfs" -all-root -keep-as-directory -comp xz
+
+    mkdir -p "${plex_tmp}/old"
+    mv "${plex_tmp}/plexmediaserver."* "${plex_tmp}/old"
+
+    mv "${plex_tmp}/${kk}/plexmediaserver.sqfs" "${plex_tmp}"
+
+    cd "${plex_tmp}"
+
+    rm -rf "${plex_tmp}/${kk}"
+
+    { [[ "${plex_archive_type}" == 'sqfs' ]] || [[ "${plex_archive_type}" == 'both' ]]; } && [[ -e "${plex_tmp}/plexmediaserver.sqfs" ]] && echo "Plex Media Server XZ-compresssed SquashFS (.sqfs) archive generated!. Archive is located at: ${plex_tmp}/plexmediaserver.sqfs" >&2
+    { [[ "${plex_archive_type}" == 'txz' ]] || [[ "${plex_archive_type}" == 'both' ]]; } && [[ -e "${plex_tmp}/plexmediaserver.txz" ]] && echo "Plex Media Server XZ compressed TAR (.txz) archive generated!. Archive is located at: ${plex_tmp}/plexmediaserver.txz}" >&2
+
+    stop
+    sleep 1
+    stop
+    sleep 1
+    sync
+    start
+    sleep 1
+
+    exit
+
 }
-
-
-
