@@ -36,6 +36,16 @@ service plexmediaserver enable
 service plexmediaserver start
 ```
 
+NOTE on mountpoint selection: By default, if there is only a single directory under `/mnt` (e.g., `/mnt/MY_DRIVE`) then plex will use that as the mount point. If this condition is not met it will default to mounting it at `/mnt/plex`. You can specify an arbitrary mountpoint by setting the following UCI config parameter `plex_drive_mnt`. e.g., run 
+
+    uci set plexmediaserver.@main[0].plex_drive_mnt=/mnt/MY_DRIVE
+    uci commit plexmediaserver
+
+NOTE on block device selection: if you have multiple `/dev/sd__` drives that have a `.plex/Library` dir, then the 1st one found is used. Set the UCI config parameter `plex_drive_dev` to override this. e.g.,
+
+    uci set plexmediaserver.@main[0].plex_drive_dev=/dev/sda2
+    uci commit plexmediaserver
+
 ***
 
 If you have an older version of the plexmediaserver init script and want to update to this new version, you can do so by running
