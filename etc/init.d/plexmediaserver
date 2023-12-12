@@ -60,7 +60,7 @@ setup_uci() {
 	
 	# add (empty) config values for any missing UCI options
 	for UCI_opt in plex_library_dir plex_application_support_dir plex_browser_root plex_compressed_archive_path plex_tmp_dir plex_force_update_download_url plex_force_version plex_version plex_bin_dir; do
-		echo "${plex_UCI}" | grep -qF "${UCI_opt}" || /sbin/uci add_list plexmediaserver.@main[0].${UCI_opt}=''
+		echo "${plex_UCI}" | grep -qF "${UCI_opt}" || /sbin/uci set plexmediaserver.@main[0].${UCI_opt}=''
 	done
 	
 	# commit changes
@@ -149,11 +149,14 @@ unpack_plex() {
 	{ [ -z "${PLEX_BIN_DIR}" ] || [ -z "${PLEX_VERSION}" ] || [ \! -f "${PLEX_BIN_DIR}/Plex Media Server" ]; } && echo "Preparing plexmediaserver for use - extracting plex binaries and library files" >&2 || return 0
 	if [ "${PLEX_COMPRESSED_ARCHIVE_PATH}" == *.txz ] || [ "${PLEX_COMPRESSED_ARCHIVE_PATH}" == *.tar.xz ]; then
 		xz -dc "${PLEX_COMPRESSED_ARCHIVE_PATH}" | tar -C "${PLEX_TMP_DIR}" -xf -
-	elif [ "${PLEX_COMPRESSED_ARCHIVE_PATH}"  == *.sqfs ]; then
+	else
+		[ x"${PLEX_COMPRESSED_ARCHIVE_PATH}"  == x ] && return 1
 		cp "${PLEX_COMPRESSED_ARCHIVE_PATH}" "${PLEX_TMP_DIR}" 
+		sleep 1
 		mount -t squashfs -o ro,relatime "${PLEX_TMP_DIR}/$(basename "${PLEX_COMPRESSED_ARCHIVE_PATH}")" "${PLEX_TMP_DIR}"
+		sleep 1
 		for nn in  "${PLEX_TMP_DIR}"/*/tmp; do
-			mount -t tmpfs tmpfs "${nn}"
+			grep -F "$nn" </proc/mounts || mount -t tmpfs tmpfs "${nn}"
 		done
 	fi
 	
@@ -296,6 +299,28 @@ restart() {
   stop
   sleep 2
   stop
+  sleep 2
+  start
+}
+
+reload() {
+
+  stop -n
+  sleep 2
+  stop -n
+  sleep 2
+  start
+}
+
+reset() {
+  stop
+  sleep 2
+  stop
+  sleep 2
+  rm -f /etc/config/plexmediaserver
+  sleep 2
+  reload_config
+  setup_uci
   sleep 2
   start
 }
