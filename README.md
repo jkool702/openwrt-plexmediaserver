@@ -15,27 +15,39 @@ The dynalink dl-wrx36 (quad core cortex-a53 @ 2.2GHz + 1gb RAM + 1x usb3 port) i
 
 NOTE: Everything works well except video transcoding...transcoding any video at 720p or higher resolution is going to studder with an ARM CPU. I highly recommend turning off video transcoding altogether in the plex media player settings. 
 
+***
+
 # INSTALL INSTRUCTIONS
 
-An install script (install_plex.sh) is in the top level repo directory. This will setup and install plex media server (via an init.d service) and will add something to something to `/etc/rc.local` to start plex on boot can be found [HERE](https://github.com/jkool702/openwrt-plexmediaserver/blob/main/install_plex.sh) 
+I have updated the plexmediaserver init script to be better at automatically finding the external drive holding the plex library and to auto-start with the built in `service enable plexmediaserver`. 
 
-IMPORTANT NOTES:
+To get plex up and running, all that is required is:
 
-1. the install script requires `curl`
-2. if the external drive is NTFS and you are using the ntfs-3g driver, the mount command that the script adds to /etc/rc.local might not work. You may need to manually change `mount /dev/sdaN ______` to `ntfs-3g /dev/sdaN _______`
+```
+# Mount the drive you want the plex library stored on (prefferably somewhhere under /mnt)
+mkdir -p  /mnt/$MOUNTPOINT
+mount /dev/sda2 /mnt/$MOUNTPOINT
 
-The easiest way to set everything up is probably to run the following on your Router:
+# create .plex/Library dir (the script looks for this to automatically figure out where the plex media server library is)
+mkdir -p /mnt/$MOUNTPOINT/.plex/Library
 
-    curl 'https://raw.githubusercontent.com/jkool702/openwrt-plexmediaserver/main/install_plex.sh' >/tmp/install_plex.sh
-    chmod +x /tmp/install_plex.sh
+# enable and start service to start plex and to auto-start on future boots
+service plexmediaserver enable
+service plexmediaserver start
+```
 
-    /tmp/install_plex.sh <PLEX_DEV> <PLEX_MNT>
+***
 
-Replace `<PLEX_DEV>` and `<PLEX_MNT>` with the block device and mountpoint you will be using. e.g. it should look something like
+If you have an older version of the plexmediaserver init script and want to update to this new version, you can do so by running
 
-    /tmp/install_plex.sh /dev/sda2 /mnt/plex
+```
+curl 'https://raw.githubusercontent.com/jkool702/openwrt-plexmediaserver/main/etc/init.d/plexmediaserver' >/etc/init.d/plexmediaserver
+chmod +x /etc/init.d/plexmediaserver
 
-After install, you can access plex from a plex media player app or from a web browser by going to `${ROUTER_IP}:32400/web` (e.g., `192.168.1.1:32400/web`)
+
+service plexmediaserver enable
+service plexmediaserver start
+```
 
 ***
 
@@ -68,3 +80,27 @@ using an in-memory squashfs-image keeps the server responsive (since its binarie
 It all works quite well, provided you turn off video transcoding in the plex settings. On my WRX36 I was streaming a HDR HEVC-encoded 4k movie to a plex app on a 4k apple TV with audio being transcoded (but not video) and had 0 dropped frames. If you need to transcode video the experience will be quite choppy on anything 720p or higher resolution....the a53 just doesnt have the processing power for realtime video transcoding.
 
 note: turning off the "automatically adjust quality" option in plex seemed to improve quality and performance by a good amount.
+
+***
+
+# OLD VERSION -  INSTALL INSTRUCTIONS
+
+An install script (install_plex.sh) is in the top level repo directory. This will setup and install plex media server (via an init.d service) and will add something to something to `/etc/rc.local` to start plex on boot can be found [HERE](https://github.com/jkool702/openwrt-plexmediaserver/blob/main/OLD/install_plex.sh) 
+
+IMPORTANT NOTES:
+
+1. the install script requires `curl`
+2. if the external drive is NTFS and you are using the ntfs-3g driver, the mount command that the script adds to /etc/rc.local might not work. You may need to manually change `mount /dev/sdaN ______` to `ntfs-3g /dev/sdaN _______`
+
+The easiest way to set everything up is probably to run the following on your Router:
+
+    curl 'https://raw.githubusercontent.com/jkool702/openwrt-plexmediaserver/main/OLD/install_plex.sh' >/tmp/install_plex.sh
+    chmod +x /tmp/install_plex.sh
+
+    /tmp/install_plex.sh <PLEX_DEV> <PLEX_MNT>
+
+Replace `<PLEX_DEV>` and `<PLEX_MNT>` with the block device and mountpoint you will be using. e.g. it should look something like
+
+    /tmp/install_plex.sh /dev/sda2 /mnt/plex
+
+After install, you can access plex from a plex media player app or from a web browser by going to `${ROUTER_IP}:32400/web` (e.g., `192.168.1.1:32400/web`)
