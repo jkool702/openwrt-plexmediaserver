@@ -178,10 +178,23 @@ is_running() {
 	[ x${plex_pid} == x ] && plex_pid=-1
 
 	PLEX_PID_LIST="$(ps | grep -E '((Plex Media Server)|(Plex DLNA Server)|(PMS RunServer)|(Plex Plug-in)|(Plex Script Hos)|('"${PLEX_TMP_DIR}"')|(^ *'"${plex_pid}"'))' | grep -v grep | awk '{print $1}')"
-	[ x${PLEX_PID_LIST} == x ] && return 1 
-	[ "$1" == '-pid' ] && echo "${PLEX_PID_LIST}"
+	[ x${PLEX_PID_LIST} == x ] && { plex_is_running=false; return 1; } 
+	plex_is_running=true
+	[ "$1" == '-p' ] && echo "${PLEX_PID_LIST}"
 	return 0
 
+}
+
+plex_umount() {
+
+    { [ x${PLEX_BIN_DIR} == x ] || [ x${PLEX_TMP_DIR} == x ]; } && setup_uci
+
+	cat /proc/mounts | grep plexmediaserver | grep -q squashfs && {
+		umount "${PLEX_BIN_DIR}/tmp" 
+		umount "${PLEX_TMP_DIR}"
+	}
+	echo "" > "${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid"
+    
 }
 
 stop() {
@@ -189,28 +202,59 @@ stop() {
 	# setup / load config from UCI
 	setup_uci
 
-	plex_umount() {
-		cat /proc/mounts | grep plexmediaserver | grep -q squashfs && {
-			umount "${PLEX_BIN_DIR}/tmp" 
-			umount "${PLEX_TMP_DIR}"
-		}
-		echo "" > "${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid"
-	}
 
-	# dont kill anything is plex isnt running
-	is_running || {  echo "Plex Media Server not running" >&2; plex_umount; return; }
+	# dont kill anything is plex isnt running. if it is running send SIGQUIT
+	is_running -p >"${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid"
+    if ${plex_is_running}; then
+        echo "Stopping Plex Media Server (sending SIGQUIT)" >&2
+        kill -3 $(cat "${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid" | sort -u)
+        echo "SIGQUIT sent to server...waiting 3 seconds and sending SIGTERM if not dead" >&2;
+        sleep 3
+    else
+        echo "Plex Media Server not running" >&2; 
+        [[ "$1" == -n ]] || plex_umount; 
+        return 0
+    fi
 		
-	echo "Stopping Plex Media Server"
-
-	# kill with `kill -3`
-	{ is_running -pid || { plex_umount; return; }; } | xargs -r kill -3 && echo echo "SIGQUIT sent to server. Waiting 3 seconds and terminating if not dead" >&2 && sleep 3
-
-	# kill with `kill -15`
-	{ is_running -pid || { echo "Plex Media Server shutdown cleanly" >&2; plex_umount; return; }; } | xargs -r kill -15 && echo echo "SIGTERM sent to server. Waiting 3 seconds and force killing if not dead" >&2 && sleep 3
-
-	# kill any remnants still running with `kill -9`
-	{ is_running -pid || { echo "Plex Media Server shutdown" >&2; plex_umount; return; }; } | xargs -r kill -9 && echo "Force killing leftover plexmediaserver processes" >&2
-
+	# if SIGQUIT didnt work then send SIGTERM
+	is_running -p >"${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid"
+    if ${plex_is_running}; then
+        echo "Plex Media Server is still running...SIGQUIT didnt work"
+        echo "Stopping Plex Media Server -- 2nd attempt (sending SIGTERM)" >&2
+        kill -15 $(cat "${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid" | sort -u)
+        echo "SIGTERM sent to Plex Media Server...waiting 3 seconds and sending SIGKILL if not dead" >&2;
+        sleep 3
+    else
+        echo "Plex Media Server shut down cleanly" >&2; 
+        [[ "$1" == -n ]] || plex_umount; 
+        return 0
+    fi
+    		
+	# if SIGTERM didnt work then send SIGKILL
+	is_running -p >"${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid"
+    if ${plex_is_running}; then
+        echo "Plex Media Server is still running...SIGTERM didnt work"
+        echo "Stopping Plex Media Server -- 3rd attempt (sending SIGKILL)" >&2
+        kill -9 $(cat "${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid" | sort -u)
+        echo "SIGKILL sent to Plex Media Server." >&2;
+        sleep 3
+    else
+        echo "Plex Media Server was terminated" >&2; 
+        [[ "$1" == -n ]] || plex_umount; 
+        return 0
+    fi
+    
+    is_running -p >"${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid"
+    if ${plex_is_running}; then
+        echo "Plex Media Server is still running after being sent SIGKILL. Something is probably wrong." >&2
+        echo "You will need to manually kill Plex Media Server. Aborting." >&2
+        exit 1
+    else
+        echo "Plex Media Server was killed" >&2; 
+        [[ "$1" == -n ]] || plex_umount; 
+        return 0
+    fi    
+  
 }
 	
 
