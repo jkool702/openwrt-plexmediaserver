@@ -35,13 +35,12 @@
 NAME='plexmediaserver'
 START=99
 STOP=99
-EXTRA_COMMANDS="setup_uci unpack_plex check_update update do_update"
+EXTRA_COMMANDS="setup_uci unpack_plex check_update update"
 EXTRA_HELP=$(cat<<EOF
         setup_uci       Does initial setup of UCI, and (if needed) downloads required plex files
         unpack_plex     Unpacks the compresssed plexmediaserver archive at /tmp/plexmediaserver/<plex_version>
         check_update    Checks if an updated Plex Media Server package is available for download
         update          Downloads Plex Media Server update (if available) and runs do_update to generate a compressed archive of it
-        do_update	      Actually downloads and generates the compressed squashfs archive (calling do_update will not check first with check_update)
 EOF
 )
 
@@ -126,7 +125,7 @@ load_uci() {
 		PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR="${PLEX_LIBRARY_DIR}/Application Support"  
 		/sbin/uci set plexmediaserver.@main[0].plex_application_support_dir="${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}"
 	}
- [ -e "${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}" ] || mkdir -p "${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}"
+  [ -e "${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}" ] || mkdir -p "${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}"
 
   [ -z "${PLEX_COMPRESSED_ARCHIVE_PATH}" ] && { 
 		[ -e "${PLEX_LIBRARY_DIR}/Application/plexmediaserver.txz" ] && PLEX_COMPRESSED_ARCHIVE_PATH="${PLEX_LIBRARY_DIR}/Application/plexmediaserver.txz" || PLEX_COMPRESSED_ARCHIVE_PATH="${PLEX_LIBRARY_DIR}/Application/plexmediaserver.sqfs"
@@ -137,7 +136,7 @@ load_uci() {
 	/sbin/uci commit plexmediaserver
 	reload_config 
 
-	[ -e "${PLEX_COMPRESSED_ARCHIVE_PATH}" ] || { check_update && do_update; }
+	[ -e "${PLEX_COMPRESSED_ARCHIVE_PATH}" ] || { check_update -n && do_update; }
 
 }
 
@@ -148,9 +147,9 @@ unpack_plex() {
 	
 	# decompress Plex Binaries and Libs from plexmediaserver.txz
 	{ [ -z "${PLEX_BIN_DIR}" ] || [ -z "${PLEX_VERSION}" ] || [ \! -f "${PLEX_BIN_DIR}/Plex Media Server" ]; } && echo "Preparing plexmediaserver for use - extracting plex binaries and library files" >&2 || return 0
-	if [[ "${PLEX_COMPRESSED_ARCHIVE_PATH}" == *.txz ]] || [[ "${PLEX_COMPRESSED_ARCHIVE_PATH}" == *.tar.xz ]]; then
+	if [ "${PLEX_COMPRESSED_ARCHIVE_PATH}" == *.txz ] || [ "${PLEX_COMPRESSED_ARCHIVE_PATH}" == *.tar.xz ]; then
 		xz -dc "${PLEX_COMPRESSED_ARCHIVE_PATH}" | tar -C "${PLEX_TMP_DIR}" -xf -
-	elif [[ "${PLEX_COMPRESSED_ARCHIVE_PATH}"  == *.sqfs ]]; then
+	elif [ "${PLEX_COMPRESSED_ARCHIVE_PATH}"  == *.sqfs ]; then
 		cp "${PLEX_COMPRESSED_ARCHIVE_PATH}" "${PLEX_TMP_DIR}" 
 		mount -t squashfs -o ro,relatime "${PLEX_TMP_DIR}/$(basename "${PLEX_COMPRESSED_ARCHIVE_PATH}")" "${PLEX_TMP_DIR}"
 		for nn in  "${PLEX_TMP_DIR}"/*/tmp; do
@@ -191,7 +190,10 @@ stop() {
 	setup_uci
 
 	plex_umount() {
-		cat /proc/mounts | grep plexmediaserver | grep -q squashfs && umount "${PLEX_BIN_DIR}/tmp" "${PLEX_TMP_DIR}"
+		cat /proc/mounts | grep plexmediaserver | grep -q squashfs && {
+			umount "${PLEX_BIN_DIR}/tmp" 
+			umount "${PLEX_TMP_DIR}"
+		}
 		echo "" > "${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR}/Plex Media Server/plexmediaserver.pid"
 	}
 
@@ -256,28 +258,32 @@ restart() {
 
 check_update() {
 
+	[ "$1" == '-n' ] || setup_uci
+
 	# determine URL's and tmp directories to use during the script
 	plex_url="$(/sbin/uci get plexmediaserver.@main[0].plex_force_update_download_url)"
 	[ -z "${plex_url}" ] && plex_url="$(curl https://plex.tv/api/downloads/5.json | sed -E s/'"id"'/'\n\n\n"id"'/g | grep asustor | sed -E s/'\{"label"'/'\n\n\n{"label"'/g | grep "$({ [ $(uname -m) == aarch64 ] || grep </proc/kallsyms -q 'arm64'; } && echo ARMv8 || echo ARMv7)" | sed -E s/'^.*"url"\:"(.*\.apk)"\,.*$'/'\1'/)"
 	
 	if [ x${PLEX_VERSION} != x ] && [ x${plex_url} != x ] && $(echo "${plex_url}" | grep -q -F "${PLEX_VERSION}"); then
 		echo "Plex Media Server is up to date" >&2
-		plex_update_available=0
+		echo "Current version:   ${PLEX_VERSION}" >&2
+		plex_update_available=false
+		return 0
 	elif $(echo "${plex_url}" | grep -q -E '^.+\/PlexMediaServer\-.+\.apk'); then
 		echo -e "An Update for Plex Media Server is available!!\n\nCurrent version:  ${PLEX_VERSION}\nNew Version:      $(echo "$plex_url" | sed -E s/'^.*\/PlexMediaServer-(.*)\.apk$'/'\1'/)\n" >&2
+		plex_update_available=true
 		return 0
 	else
 		echo "Download url for downloading an update to plex was not resolved. The download url can be manually specified via the plexmediasserver UCI variable 'plex_force_update_download_url'" >&2
+		plex_update_available=false
 		return 1
 	fi
 }
 
 update() {
 
-	check_update && {
-		setup_uci
-		do_update
-	}
+	check_update 
+	${plex_update_available} && do_update
 
 }
 
