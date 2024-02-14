@@ -79,18 +79,18 @@ setup_uci() {
 
     [[ -n "${PLEX_DRIVE_MNT}" ]] && [[ -n "${PLEX_DRIVE_DEV}" ]] && {
         PLEX_DRIVE_MNT="${PLEX_DRIVE_MNT%'/'}"
-        cat /proc/mounts | grep -F "${PLEX_DRIVE_DEV}" | grep -qF " ${PLEX_DRIVE_MNT} " || {
+        grep -F "${PLEX_DRIVE_DEV}" </proc/mounts | grep -qF " ${PLEX_DRIVE_MNT} " || {
             { mount "${PLEX_DRIVE_DEV}" "${PLEX_DRIVE_MNT}" 2>&1 | grep -qF "unknown filesystem type 'ntfs'"; } && { cat /proc/filesystems | grep -qF 'ntfs3' ; } && ntfs-3g "${PLEX_DRIVE_DEV}" "${PLEX_DRIVE_MNT}"
             }
     }
 
     # attempt to automatically determine the drive with plex on it by looking for the `.plex/Library` directory
-    { [[ -z "${PLEX_BROWSER_ROOT}" ]] || ! [[ -e "${PLEX_BROWSER_ROOT}" ]]; } && PLEX_BROWSER_ROOT="$(cat /proc/mounts | grep -E '^\/dev\/sd' | grep -Ev 'squashfs|ubifs' | sed -E s/'^\/dev\/[^ \t]*[ \t]+([^ \t]*)[ \t]+.*$'/'\1'/ | while read -r nn; do find "$nn" -maxdepth 2 -type d -name '.plex'; done | while read -r nn; do [[ -e "${nn}/Library" ]] && echo "$nn" | sed -E s/'\/[^\/]*$'// && break; done | head -n 1)"
+    { [[ -z "${PLEX_BROWSER_ROOT}" ]] || ! [[ -e "${PLEX_BROWSER_ROOT}" ]]; } && PLEX_BROWSER_ROOT="$(grep -E '^\/dev\/sd' </proc/mounts | grep -Ev 'squashfs|ubifs' | sed -E s/'^\/dev\/[^ \t]*[ \t]+([^ \t]*)[ \t]+.*$'/'\1'/ | while read -r nn; do find "$nn" -maxdepth 2 -type d -name '.plex'; done | while read -r nn; do [[ -e "${nn}/Library" ]] && echo "$nn" | sed -E s/'\/[^\/]*$'// && break; done | head -n 1)"
 
     # if not found, try again after running `mount -a``
-    { [[ -z "${PLEX_BROWSER_ROOT}" ]] || ! [[ -e "${PLEX_BROWSER_ROOT}" ]]; } && [[ -e /etc/fstab ]] && mount -a && PLEX_BROWSER_ROOT="$(cat /proc/mounts | grep -E '^\/dev\/sd' | grep -Ev 'squashfs|ubifs' | sed -E s/'^\/dev\/[^ \t]*[ \t]+([^ \t]*)[ \t]+.*$'/'\1'/ | while read -r nn; do find "$nn" -maxdepth 2 -type d -name '.plex'; done | while read -r nn; do [[ -e "${nn}/Library" ]] && echo "$nn" | sed -E s/'\/[^\/]*$'// && break; done | head -n 1)"
+    { [[ -z "${PLEX_BROWSER_ROOT}" ]] || ! [[ -e "${PLEX_BROWSER_ROOT}" ]]; } && [[ -e /etc/fstab ]] && mount -a && PLEX_BROWSER_ROOT="$(grep -E '^\/dev\/sd' </proc/mounts | grep -Ev 'squashfs|ubifs' | sed -E s/'^\/dev\/[^ \t]*[ \t]+([^ \t]*)[ \t]+.*$'/'\1'/ | while read -r nn; do find "$nn" -maxdepth 2 -type d -name '.plex'; done | while read -r nn; do [[ -e "${nn}/Library" ]] && echo "$nn" | sed -E s/'\/[^\/]*$'// && break; done | head -n 1)"
 
-    if [[ -z "${PLEX_BROWSER_ROOT}" ]]; then
+    if [[ -z "${PLEX_BROWSER_ROOT}" ]] || ! echo "${PLEX_BROWSER_ROOT}" | grep -qE "$(sed -E 's/^[^ ]* /\(/;s/ .*$/\)/;s/\//\\\//g' </proc/mounts | tr $'\n' '|')" 2>/dev/null; then
         # try to find it by mounting all /dev/sd__ block devices one at a time
         [[ -z "${PLEX_DRIVE_MNT}" ]] && {
             if [[ $(find /mnt -maxdepth 1 -mindepth 1 -type d | grep -vF '/mnt/plex' | wc -l) == 1 ]]; then
@@ -100,12 +100,12 @@ setup_uci() {
             fi
         }
         PLEX_DRIVE_MNT="${PLEX_DRIVE_MNT%'/'}"
-        echo "SETTING MOUNTPOINT OF THE EXTERNAL DRIVE HOLDING PLEX LIBRARY TO:   ${PLEX_DRIVE_MNT}" >&2 && 
+        echo "SETTING MOUNTPOINT OF THE EXTERNAL DRIVE HOLDING PLEX LIBRARY TO:   ${PLEX_DRIVE_MNT}" >&2 
         mkdir -p "${PLEX_DRIVE_MNT}" 
         for devPath in /dev/sd*; do
             [[ "$devPath" == /dev/sd[a-z] ]] && continue
             { mount "${devPath}" "${PLEX_DRIVE_MNT}" 2>&1 | grep -qF "unknown filesystem type 'ntfs'"; } && { cat /proc/filesystems | grep -qF 'ntfs3' ; } && ntfs-3g "${devPath}" "${PLEX_DRIVE_MNT}"
-            PLEX_BROWSER_ROOT="$(cat /proc/mounts | grep -E '^\/dev\/sd' | grep -Ev 'squashfs|ubifs' | sed -E s/'^\/dev\/[^ \t]*[ \t]+([^ \t]*)[ \t]+.*$'/'\1'/ | while read -r nn; do find "$nn" -maxdepth 2 -type d -name '.plex'; done | while read -r nn; do [[ -e "${nn}/Library" ]] && echo "$nn" | sed -E s/'\/[^\/]*$'// && break; done | head -n 1)"
+            PLEX_BROWSER_ROOT="$(grep -E '^\/dev\/sd' </proc/mounts | grep -Ev 'squashfs|ubifs' | sed -E s/'^\/dev\/[^ \t]*[ \t]+([^ \t]*)[ \t]+.*$'/'\1'/ | while read -r nn; do find "$nn" -maxdepth 2 -type d -name '.plex'; done | while read -r nn; do [[ -e "${nn}/Library" ]] && echo "$nn" | sed -E s/'\/[^\/]*$'// && break; done | head -n 1)"
             if { [[ -z "${PLEX_BROWSER_ROOT}" ]] || ! [[ -e "${PLEX_BROWSER_ROOT}" ]]; }; then
                 umount "${PLEX_DRIVE_MNT}"
             else
@@ -116,13 +116,13 @@ setup_uci() {
         done
     else
         # browser root found --> drive is mounted. Pull out drive dev path and mount point
-        [[ -z "${PLEX_DRIVE_MNT}" ]] && PLEX_DRIVE_MNT="$(cat /proc/mounts | sed -E 's/^[^ ]* //;s/ .*$//' |  { PLEX_DRIVE_MNT=''; while read -r; do echo "${PLEX_BROWSER_ROOT}" | grep -qF "${REPLY}" && echo "${#REPLY} $REPLY"; done; } | sort -n -k1 | tail -n1 | sed -E s/'^[0-9]+ '//)"
+        [[ -z "${PLEX_DRIVE_MNT}" ]] && PLEX_DRIVE_MNT="$(sed -E 's/^[^ ]* //;s/ .*$//' </proc/mounts | { PLEX_DRIVE_MNT=''; while read -r; do echo "${PLEX_BROWSER_ROOT}" | grep -qF "${REPLY}" && echo "${#REPLY} $REPLY"; done; } | sort -n -k1 | tail -n1 | sed -E s/'^[0-9]+ '//)"
         [[ "${PLEX_DRIVE_MNT}" == '/' ]]  && {
             echo 'COULD NOT DETERMINE THE MOUNTPOINT OF THE DRIVE HOLDING THE PLEX LIBRARY.' >&2
             echo 'PLEASE MANUALLY SPECIFY DEFINE IN THE UCI CONFIG AND RESTART PLEX' >&2
             exit 1
         }
-        PLEX_DRIVE_DEV="$(cat /proc/mounts | grep " ${PLEX_DRIVE_MNT} " | sed -E s/'[ \t].*$'//)"
+        PLEX_DRIVE_DEV="$(grep " ${PLEX_DRIVE_MNT} " </proc/mounts | sed -E s/'[ \t].*$'//)"
     fi
 
     { [[ -z "${PLEX_BROWSER_ROOT}" ]] || ! [[ -e "${PLEX_BROWSER_ROOT}" ]]; } && {
@@ -230,7 +230,7 @@ plex_umount() {
 
     { [[ x${PLEX_BIN_DIR} == x ]] || [[ x${PLEX_TMP_DIR} == x ]]; } && setup_uci
 
-    cat /proc/mounts | grep plexmediaserver | grep -q squashfs && {
+    grep plexmediaserver </proc/mounts | grep -q squashfs && {
         umount "${PLEX_BIN_DIR}/tmp"
         umount "${PLEX_TMP_DIR}"
     }
@@ -376,7 +376,7 @@ check_update() {
         echo "Current version:   ${PLEX_VERSION}" >&2
         plex_update_available=false
         return 0
-    elif $(echo "${plex_url}" | grep -q -E '^.+\/PlexMediaServer\-.+\.apk'); then
+    elif echo "${plex_url}" | grep -q -E '^.+\/PlexMediaServer\-.+\.apk'; then
         echo "An Update for Plex Media Server is available!!" >&2
 	echo "Current version:  ${PLEX_VERSION}" >&2
 	echo "New Version:      $(echo "$plex_url" | sed -E s/'^.*\/PlexMediaServer-(.*)\.apk$'/'\1'/)\n" >&2
