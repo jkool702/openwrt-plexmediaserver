@@ -108,6 +108,10 @@ setup_uci() {
         }
     }
 
+    if [ -z "${PLEX_BROWSER_ROOT}" ] && [ "${PLEX_DRIVE_MNT%/}" ]; then
+        PLEX_BROWSER_ROOT="${PLEX_DRIVE_MNT}"
+    fi
+
     if [ -z "${PLEX_BROWSER_ROOT}" ] || [ -z "${PLEX_DRIVE_MNT}" ]; then
         # try to find it by mounting all /dev/sd__ block devices one at a time
         [ -z "${PLEX_DRIVE_MNT}" ] && {
