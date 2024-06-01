@@ -113,7 +113,7 @@ setup_uci() {
         [ -z "${PLEX_DRIVE_MNT}" ] && {
             if [ $(find /mnt -maxdepth 1 -mindepth 1 -type d | grep -qvF '/mnt/plex' | wc -l) = 1 ]; then
                 PLEX_DRIVE_MNT="$(find /mnt -maxdepth 1 -mindepth 1 -type d | grep -vF '/mnt/plex')"
-            else
+            elif ! [ "${PLEX_DRIVE_DEV}" == '/dev/null' ]; then
                 PLEX_DRIVE_MNT='/mnt/plex'
                 NEED_PLEX_BROWSER_ROOT=false
             fi
