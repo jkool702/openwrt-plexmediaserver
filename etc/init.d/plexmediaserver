@@ -160,8 +160,11 @@ setup_uci() {
         else
             PLEX_LIBRARY_DIR="$(find "${PLEX_BROWSER_ROOT}" -type d -maxdepth 3 -path '*/.plex/Library' | head -n 1)"
             [ -z "${PLEX_LIBRARY_DIR}" ] && PLEX_LIBRARY_DIR="$(find "${PLEX_DRIVE_MNT}" -type d -maxdepth 4 -path '*/.plex/Library' | head -n 1)"
-
         fi
+        [ -z "${PLEX_LIBRARY_DIR}" ] && ${NEED_PLEX_LIBRARY_DIR} && {
+            PLEX_LIBRARY_DIR="${PLEX_BROWSER_ROOT}/.plex/Library"
+            mkdir -p "${PLEX_LIBRARY_DIR}"
+        }
         ${NEED_PLEX_LIBRARY_DIR} && [ "${PLEX_LIBRARY_DIR}" ] && {
             /sbin/uci set plexmediaserver.@main[0].plex_library_dir="${PLEX_LIBRARY_DIR}"
             mkdir -p "${PLEX_LIBRARY_DIR}/Application" && mkdir -p "${PLEX_LIBRARY_DIR}/Application Support"
